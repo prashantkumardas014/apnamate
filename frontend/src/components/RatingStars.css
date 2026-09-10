@@ -1,0 +1,15 @@
+.rating-stars-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rating-stars {
+  display: inline-block;
+}
+
+.rating-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
