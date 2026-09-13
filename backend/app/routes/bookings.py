@@ -16,7 +16,6 @@ router = APIRouter()
 # CONSTANTS
 # =========================================================
 
-# New canonical statuses (quote flow)
 STATUS_PENDING_QUOTE = "pending_quote"
 STATUS_QUOTED        = "quoted"
 STATUS_ACCEPTED      = "accepted"
@@ -25,7 +24,6 @@ STATUS_PAID          = "paid"
 STATUS_CANCELLED     = "cancelled"
 STATUS_COMPLETED     = "completed"
 
-# Legacy statuses still present in old rows
 LEGACY_PENDING   = "Pending"
 LEGACY_CONFIRMED = "Confirmed"
 LEGACY_ACCEPTED  = "Accepted"
@@ -62,7 +60,6 @@ class ProfileUpdate(BaseModel):
     experience: Optional[str] = None
     price: Optional[str] = None
     category: Optional[str] = None
-    # ✅ NEW: provider UPI (used for payouts) + price range
     upi_id: Optional[str] = None
     min_price: Optional[float] = None
     max_price: Optional[float] = None
@@ -217,7 +214,6 @@ def get_booking_stats(user_id: int, db: Session, role: str = "customer") -> dict
 # =========================================================
 
 def serialize_booking(booking: models.Booking, db: Session, include_customer: bool = False) -> dict:
-    """Serialize a Booking with all quote-flow fields."""
     booking_date = datetime.strptime(booking.date, '%Y-%m-%d').date()
     status_value = booking.status
 
@@ -246,7 +242,6 @@ def serialize_booking(booking: models.Booking, db: Session, include_customer: bo
         "address": booking.address,
         "description": booking.description,
         "status": status_value,
-        # Quote flow
         "quoted_amount": float(booking.quoted_amount) if booking.quoted_amount is not None else None,
         "quote_note": booking.quote_note,
         "quoted_at": booking.quoted_at.isoformat() if booking.quoted_at else None,
@@ -254,15 +249,12 @@ def serialize_booking(booking: models.Booking, db: Session, include_customer: bo
         "quote_rejected_at": booking.quote_rejected_at.isoformat() if booking.quote_rejected_at else None,
         "rejection_reason": booking.rejection_reason,
         "paid_at": booking.paid_at.isoformat() if booking.paid_at else None,
-        # Review
         "has_review": has_review,
         "review": review_data,
-        # Timestamps
         "created_at": booking.created_at.isoformat() if booking.created_at else None,
         "updated_at": booking.updated_at.isoformat() if booking.updated_at else None,
     }
 
-    # ✅ Always include customer name when requested (was the same before)
     if include_customer:
         customer = db.query(models.User).filter(models.User.id == booking.customer_id).first()
         data["customer_name"] = customer.name if customer else "Unknown"
@@ -1035,6 +1027,19 @@ async def complete_booking(
         db.rollback()
         raise HTTPException(500, f"Error completing booking: {str(e)}")
 
+@router.post("/{booking_id}/complete")
+async def complete_booking_post(
+    booking_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """POST alias for the PATCH /complete endpoint."""
+    return await complete_booking(
+        booking_id=booking_id,
+        current_user=current_user,
+        db=db,
+    )
+
 @router.get("/stats/provider/{provider_id}")
 async def get_provider_stats(
     provider_id: int,
@@ -1162,14 +1167,21 @@ async def get_user_profile(
                 "price": user.price,
                 "min_price": float(user.min_price) if user.min_price is not None else 0,
                 "max_price": float(user.max_price) if user.max_price is not None else 0,
-                # ✅ NEW: return UPI so provider dashboard can pre-fill
                 "upi_id": user.upi_id,
                 "category": user.category,
                 "availability": user.availability or "Available",
                 "is_active": user.is_active if show_full else None,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
                 "stats": stats if show_full else None,
-                "provider_stats": provider_stats
+                "provider_stats": provider_stats,
+
+                # ✅ NEW: fields used by Profile / EditProfile pages
+                "phone": getattr(user, "phone", None),
+                "phone_verified": int(getattr(user, "phone_verified", 0) or 0),
+                "avatar_url": getattr(user, "avatar_url", None),
+                "profile_picture": getattr(user, "profile_picture", None),
+                "aadhaar_verified": int(getattr(user, "aadhaar_verified", 0) or 0),
+                "aadhaar_last4": getattr(user, "aadhaar_last4", None),
             }
         }
     except HTTPException:
@@ -1199,7 +1211,6 @@ async def update_user_profile(
         if email_owner:
             raise HTTPException(400, "Email is already registered")
 
-    # ✅ Now includes upi_id + price range
     update_fields = [
         "name", "email", "service", "location", "experience",
         "price", "category", "upi_id", "min_price", "max_price"
@@ -1337,7 +1348,14 @@ async def get_all_users_admin(
                 "category": user.category,
                 "is_active": user.is_active,
                 "booking_count": booking_count,
-                "created_at": user.created_at.isoformat() if user.created_at else None
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+
+                # ✅ NEW fields
+                "phone": getattr(user, "phone", None),
+                "phone_verified": int(getattr(user, "phone_verified", 0) or 0),
+                "avatar_url": getattr(user, "avatar_url", None),
+                "aadhaar_verified": int(getattr(user, "aadhaar_verified", 0) or 0),
+                "aadhaar_last4": getattr(user, "aadhaar_last4", None),
             })
 
         return {

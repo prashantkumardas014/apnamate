@@ -35,6 +35,17 @@ class User(Base):
     # ✅ Provider's UPI ID (used by admin to send payouts)
     upi_id = Column(String, nullable=True)
 
+    # ✅ Phone OTP + Google OAuth
+    phone = Column(String, nullable=True, unique=True, index=True)
+    phone_verified = Column(Integer, default=0)
+    google_id = Column(String, nullable=True, unique=True, index=True)
+    profile_picture = Column(String, nullable=True)
+
+    # ✅ NEW: Avatar + Aadhaar verification
+    avatar_url = Column(String, nullable=True)
+    aadhaar_verified = Column(Integer, default=0)
+    aadhaar_last4 = Column(String(4), nullable=True)
+
     # User Account Status
     is_active = Column(Integer, default=1)
 
@@ -92,9 +103,48 @@ class User(Base):
         back_populates="provider",
         cascade="all, delete-orphan",
     )
+    # ✅ Admin user who verified payments
+    verified_payments = relationship(
+        "Payment",
+        foreign_keys="Payment.verified_by",
+        back_populates="verifier",
+    )
+    # ✅ Bills where user is the customer
+    bills_as_customer = relationship(
+        "Bill",
+        foreign_keys="Bill.customer_id",
+        back_populates="customer",
+    )
+    # ✅ Bills where user is the provider
+    bills_as_provider = relationship(
+        "Bill",
+        foreign_keys="Bill.provider_id",
+        back_populates="provider",
+    )
 
     def __repr__(self):
         return f"<User(id={self.id}, name={self.name}, role={self.role})>"
+
+
+# ==============================
+# OTP CODE MODEL
+# ==============================
+# Stores short-lived one-time passcodes for phone login.
+
+class OtpCode(Base):
+    __tablename__ = "otp_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String, nullable=False, index=True)
+    code = Column(String(6), nullable=False)
+    purpose = Column(String(20), default="login")
+    attempts = Column(Integer, default=0)
+    used = Column(Integer, default=0)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    def __repr__(self):
+        return f"<OtpCode(id={self.id}, phone={self.phone}, used={self.used})>"
 
 
 # ==============================
@@ -114,7 +164,7 @@ class Booking(Base):
     address = Column(String, nullable=False)
     description = Column(String, nullable=False)
 
-    # Flow: pending_quote → quoted → accepted → paid
+    # Flow: pending_quote → quoted → accepted → payment_pending → paid → completed
     #                        → rejected
     #                        → cancelled
     status = Column(String, default="pending_quote")
@@ -129,6 +179,7 @@ class Booking(Base):
 
     # Payment
     paid_at = Column(DateTime, nullable=True)
+    paid_amount = Column(Integer, nullable=True)   # ✅ what customer actually paid
 
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, nullable=True)
@@ -307,8 +358,13 @@ class Payment(Base):
     utr_number = Column(String, nullable=True)      # customer-submitted UTR
     screenshot_url = Column(String, nullable=True)  # customer proof
 
-    # Status: pending | awaiting_verification | completed | failed | refunded
+    # Status: pending | awaiting_verification | completed | failed | refunded | rejected
     status = Column(String, default="pending")
+
+    # Admin verification fields
+    verified_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, nullable=True)
@@ -318,6 +374,18 @@ class Payment(Base):
     booking = relationship("Booking", back_populates="payment")
     user = relationship("User", foreign_keys=[user_id], back_populates="payments")
     provider = relationship("User", foreign_keys=[provider_id], back_populates="received_payments")
+    verifier = relationship(
+        "User",
+        foreign_keys=[verified_by],
+        back_populates="verified_payments",
+    )
+    # ✅ NEW: Bill generated for this payment (one-to-one)
+    bill = relationship(
+        "Bill",
+        back_populates="payment",
+        uselist=False,
+        foreign_keys="Bill.payment_id",
+    )
 
     def __repr__(self):
         return f"<Payment(id={self.id}, booking_id={self.booking_id}, amount={self.amount}, status={self.status}, gateway={self.gateway})>"
@@ -378,3 +446,80 @@ class Message(Base):
 
     def __repr__(self):
         return f"<Message(id={self.id}, sender_id={self.sender_id}, receiver_id={self.receiver_id})>"
+
+
+# ==============================
+# BILL / INVOICE MODEL
+# ==============================
+# Immutable snapshot of an approved payment. Created once when an admin
+# confirms the payment. PDF is regenerated on demand from these fields.
+
+class Bill(Base):
+    __tablename__ = "bills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bill_number = Column(String, unique=True, index=True, nullable=False)
+    version = Column(Integer, default=1)
+
+    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=False)
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Snapshot of amounts at issuance (immutable)
+    quoted_amount = Column(Numeric(10, 2), nullable=False)
+    paid_amount = Column(Numeric(10, 2), nullable=False)
+    commission = Column(Numeric(10, 2), default=0)
+    net_to_provider = Column(Numeric(10, 2), default=0)
+    currency = Column(String, default="INR")
+
+    # Snapshot of parties (immutable for the record)
+    customer_name = Column(String, nullable=False)
+    customer_email = Column(String, nullable=False)
+    provider_name = Column(String, nullable=True)
+    service = Column(String, nullable=False)
+    booking_date = Column(String, nullable=False)
+
+    # Payment proof
+    gateway = Column(String, nullable=False)
+    utr_number = Column(String, nullable=True)
+    verified_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Delivery tracking
+    issued_at = Column(DateTime, default=datetime.now)
+    emailed_to_customer_at = Column(DateTime, nullable=True)
+    emailed_to_provider_at = Column(DateTime, nullable=True)
+    email_status = Column(String, default="pending")   # pending | sent | partial | failed
+    email_error = Column(Text, nullable=True)
+
+    # Relationships
+    booking = relationship("Booking", foreign_keys=[booking_id])
+    payment = relationship("Payment", foreign_keys=[payment_id], back_populates="bill")
+    customer = relationship("User", foreign_keys=[customer_id], back_populates="bills_as_customer")
+    provider = relationship("User", foreign_keys=[provider_id], back_populates="bills_as_provider")
+    verified_by_admin = relationship("User", foreign_keys=[verified_by_admin_id])
+
+    def __repr__(self):
+        return f"<Bill(id={self.id}, number={self.bill_number}, amount={self.paid_amount})>"
+
+
+# ==============================
+# EMAIL LOG (audit trail for every email sent)
+# ==============================
+
+class EmailLog(Base):
+    __tablename__ = "email_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    to_email = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    template = Column(String, nullable=False)
+    status = Column(String, default="pending")     # pending | sent | failed
+    error = Column(Text, nullable=True)
+    bill_id = Column(Integer, ForeignKey("bills.id"), nullable=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    sent_at = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<EmailLog(id={self.id}, to={self.to_email}, status={self.status})>"

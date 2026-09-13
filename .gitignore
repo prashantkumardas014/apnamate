@@ -1,89 +1,62 @@
-﻿# ==============================
-# Python
-# ==============================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-.venv/
-*.egg-info/
-dist/
-build/
-.pytest_cache/
-.mypy_cache/
-.coverage
-htmlcov/
+# =========================================================
+# BACKEND
+# =========================================================
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/*.pyc
+backend/.pytest_cache/
 
-# ==============================
-# Node / React
-# ==============================
-node_modules/
-dist/
-build/
-.cache/
-.parcel-cache/
-.vite/
-*.local
+# Database files
+backend/*.db
+backend/*.db.backup-*
+backend/*.sqlite
+backend/check_*.py
+backend/view_db.py
+backend/*_db.py
 
-# ==============================
-# Environment / Secrets
-# ==============================
+# Test scripts & outputs (dev only)
+backend/test_email.py
+backend/test_bill.py
+backend/test_bill.pdf
+backend/bill_customer_preview.pdf
+backend/bill_provider_preview.pdf
+backend/_test_verify_local.py
+backend/preview_bills.py
+backend/migrate_bills.py
+backend/complete_booking.py
+backend/backfill_bills.py
+backend/create_bill_for_booking.py
+backend/fix_payment.py
+
+# Secrets
+backend/.env
 .env
-.env.*
-!.env.example
-*.pem
-*.key
 
-# ==============================
-# Databases
-# ==============================
-*.db
-*.db-shm
-*.db-wal
-*.db.*
-*.sqlite
-*.sqlite3
-apnamate.db
-apnamate.db.*
-
-# ==============================
 # Uploads
-# ==============================
-uploads/
 backend/uploads/
-static/uploads/
 
-# ==============================
-# IDE / Editor
-# ==============================
+# =========================================================
+# FRONTEND
+# =========================================================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/npm-debug.log*
+
+# =========================================================
+# SNAPSHOTS & BACKUPS
+# =========================================================
+ApnaMate-Snapshot-*/
+ApnaMate-Snapshot-*.zip
+*.bak
+
+# =========================================================
+# IDE / OS
+# =========================================================
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-
-# ==============================
-# OS
-# ==============================
 .DS_Store
 Thumbs.db
-desktop.ini
-
-# ==============================
-# Logs
-# ==============================
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# ==============================
-# Backups
-# ==============================
-*.backup
-*.backup2
-*.backup3

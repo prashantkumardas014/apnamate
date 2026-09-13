@@ -14,6 +14,7 @@ import {
   Title,
 } from "chart.js";
 import { Pie, Bar } from "react-chartjs-2";
+import "./AdminDashboard.css";
 
 // Register ChartJS components
 ChartJS.register(
@@ -199,7 +200,7 @@ function AdminDashboard() {
       alert("No data to export!");
       return;
     }
-    
+
     const csvRows = [];
     csvRows.push(headers.join(","));
 
@@ -628,7 +629,7 @@ function AdminDashboard() {
       userItem.id?.toString().includes(search)
     );
 
-    const matchesStatus = userStatusFilter === "All" || 
+    const matchesStatus = userStatusFilter === "All" ||
       (userStatusFilter === "Active" && userItem.is_active === 1) ||
       (userStatusFilter === "Blocked" && userItem.is_active === 0);
 
@@ -671,20 +672,8 @@ function AdminDashboard() {
       {
         label: "Booking Status",
         data: [pendingBookings, acceptedBookings, completedBookings, rejectedBookings, cancelledBookings],
-        backgroundColor: [
-          "#fef3c7",
-          "#dbeafe",
-          "#dcfce7",
-          "#ffedd5",
-          "#fee2e2",
-        ],
-        borderColor: [
-          "#92400e",
-          "#1e40af",
-          "#166534",
-          "#c2410c",
-          "#b91c1c",
-        ],
+        backgroundColor: ["#fef3c7", "#dbeafe", "#dcfce7", "#ffedd5", "#fee2e2"],
+        borderColor: ["#92400e", "#1e40af", "#166534", "#c2410c", "#b91c1c"],
         borderWidth: 2,
       },
     ],
@@ -696,22 +685,8 @@ function AdminDashboard() {
       {
         label: "Bookings",
         data: [totalBookings, pendingBookings, acceptedBookings, completedBookings, rejectedBookings, cancelledBookings],
-        backgroundColor: [
-          "#2563eb",
-          "#fef3c7",
-          "#dbeafe",
-          "#dcfce7",
-          "#ffedd5",
-          "#fee2e2",
-        ],
-        borderColor: [
-          "#1e3a8a",
-          "#92400e",
-          "#1e40af",
-          "#166534",
-          "#c2410c",
-          "#b91c1c",
-        ],
+        backgroundColor: ["#2563eb", "#fef3c7", "#dbeafe", "#dcfce7", "#ffedd5", "#fee2e2"],
+        borderColor: ["#1e3a8a", "#92400e", "#1e40af", "#166534", "#c2410c", "#b91c1c"],
         borderWidth: 2,
       },
     ],
@@ -721,9 +696,7 @@ function AdminDashboard() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
-        position: "bottom",
-      },
+      legend: { position: "bottom" },
     },
   };
 
@@ -743,21 +716,20 @@ function AdminDashboard() {
         }}
       >
         <div style={{ textAlign: "center" }}>
-          <div className="spinner" style={{
-            width: "48px",
-            height: "48px",
-            border: "4px solid #e5e7eb",
-            borderTopColor: "#2563eb",
-            borderRadius: "50%",
-            animation: "spin 1s linear infinite",
-            margin: "0 auto 16px",
-          }}></div>
+          <div
+            className="spinner"
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "4px solid #e5e7eb",
+              borderTopColor: "#2563eb",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px",
+            }}
+          ></div>
           <p>Loading admin dashboard...</p>
-          <style>{`
-            @keyframes spin {
-              to { transform: rotate(360deg); }
-            }
-          `}</style>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
     );
@@ -768,805 +740,419 @@ function AdminDashboard() {
   // =========================================================
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "#f5f7fb",
-        padding: "30px",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* HEADER */}
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto 30px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "15px",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, color: "#1e293b" }}>
-            Admin Dashboard 🛡️
-          </h1>
-          <p style={{ color: "#64748b", marginTop: "8px" }}>
-            Manage ApnaMate users and platform activity.
-          </p>
-          <p
-            style={{
-              color: "#2563eb",
-              marginTop: "5px",
-              fontWeight: "bold",
-            }}
-          >
-            Welcome, {user.name}
-          </p>
-        </div>
+    <div className="admin-dashboard">
 
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <button
-            onClick={() => navigate("/notifications")}
-            style={{
-              padding: "10px 18px",
-              backgroundColor: "#7c3aed",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              position: "relative",
-            }}
-          >
-            🔔 Notifications
-            {notificationCount > 0 && (
-              <span
-                style={{
-                  position: "absolute",
-                  top: "-8px",
-                  right: "-8px",
-                  backgroundColor: "#dc2626",
-                  color: "white",
-                  borderRadius: "50%",
-                  padding: "4px 8px",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  minWidth: "20px",
-                  textAlign: "center",
-                }}
-              >
-                {notificationCount}
-              </span>
-            )}
-          </button>
+      {/* ========== HERO ========== */}
+      <div className="admin-hero">
+        <div className="admin-hero-inner">
+          <div className="admin-hero-badge">🛡️ Admin</div>
+          <h1>Admin Dashboard</h1>
+          <p>Manage ApnaMate users, bookings & platform activity.</p>
 
-          <button
-            onClick={handleRefresh}
-            style={headerButtonStyle("#2563eb")}
-          >
-            🔄 Refresh
-          </button>
-
-          <button
-            onClick={handleLogout}
-            style={headerButtonStyle("#dc2626")}
-          >
-            🚪 Logout
-          </button>
-        </div>
-      </div>
-
-      {/* USER STATISTICS */}
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto 30px",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "15px",
-        }}
-      >
-        <div style={statCardStyle}>
-          <h3>Total Users</h3>
-          <p style={statNumberStyle}>{totalUsers}</p>
-        </div>
-        <div style={statCardStyle}>
-          <h3>Customers</h3>
-          <p style={statNumberStyle}>{totalCustomers}</p>
-        </div>
-        <div style={statCardStyle}>
-          <h3>Providers</h3>
-          <p style={statNumberStyle}>{totalProviders}</p>
-        </div>
-        <div style={statCardStyle}>
-          <h3>Admins</h3>
-          <p style={statNumberStyle}>{totalAdmins}</p>
-        </div>
-      </div>
-
-      {/* BOOKING STATISTICS + CHARTS */}
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto 30px",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: "15px",
-        }}
-      >
-        <div style={bookingStatCardStyle}>
-          <h3>Total Bookings</h3>
-          <p style={statNumberStyle}>{totalBookings}</p>
-        </div>
-        <div style={bookingStatCardStyle}>
-          <h3>Pending</h3>
-          <p style={{ ...statNumberStyle, color: "#d97706" }}>{pendingBookings}</p>
-        </div>
-        <div style={bookingStatCardStyle}>
-          <h3>Accepted</h3>
-          <p style={{ ...statNumberStyle, color: "#2563eb" }}>{acceptedBookings}</p>
-        </div>
-        <div style={bookingStatCardStyle}>
-          <h3>Completed</h3>
-          <p style={{ ...statNumberStyle, color: "#16a34a" }}>{completedBookings}</p>
-        </div>
-        <div style={bookingStatCardStyle}>
-          <h3>Rejected</h3>
-          <p style={{ ...statNumberStyle, color: "#ea580c" }}>{rejectedBookings}</p>
-        </div>
-        <div style={bookingStatCardStyle}>
-          <h3>Cancelled</h3>
-          <p style={{ ...statNumberStyle, color: "#dc2626" }}>{cancelledBookings}</p>
-        </div>
-      </div>
-
-      {/* CHARTS SECTION */}
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto 30px",
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
-          gap: "20px",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "20px",
-            borderRadius: "10px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-            height: "350px",
-          }}
-        >
-          <h3 style={{ textAlign: "center", color: "#1e293b" }}>
-            Booking Status Distribution
-          </h3>
-          <div style={{ height: "280px" }}>
-            {totalBookings > 0 ? (
-              <Pie data={pieChartData} options={chartOptions} />
-            ) : (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
-                No bookings data available
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "20px",
-            borderRadius: "10px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-            height: "350px",
-          }}
-        >
-          <h3 style={{ textAlign: "center", color: "#1e293b" }}>
-            Booking Overview
-          </h3>
-          <div style={{ height: "280px" }}>
-            {totalBookings > 0 ? (
-              <Bar data={barChartData} options={chartOptions} />
-            ) : (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
-                No bookings data available
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ALL BOOKINGS */}
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto 40px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "15px",
-            flexWrap: "wrap",
-            gap: "10px",
-          }}
-        >
-          <h2 style={{ color: "#1e293b", margin: 0 }}>All Bookings 📋</h2>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <div className="admin-hero-actions">
             <button
-              onClick={exportBookingsCSV}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#16a34a",
-                color: "white",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
+              className="admin-hero-btn warn"
+              onClick={() => navigate("/notifications")}
+              style={{ position: "relative" }}
             >
-              📤 Export Bookings
-            </button>
-            <span
-              style={{
-                backgroundColor: "#e0e7ff",
-                color: "#3730a3",
-                padding: "8px 12px",
-                borderRadius: "20px",
-                fontWeight: "bold",
-              }}
-            >
-              {totalBookings} Bookings
-            </span>
-          </div>
-        </div>
-
-        {/* BOOKING SEARCH AND FILTER */}
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            marginBottom: "15px",
-            flexWrap: "wrap",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="🔍 Search bookings by customer, provider, service, or ID..."
-            value={bookingSearchTerm}
-            onChange={(e) => setBookingSearchTerm(e.target.value)}
-            style={{
-              flex: 2,
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "15px",
-              minWidth: "200px",
-            }}
-          />
-
-          <select
-            value={bookingStatusFilter}
-            onChange={(e) => setBookingStatusFilter(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "15px",
-              minWidth: "150px",
-            }}
-          >
-            <option value="All">All Status</option>
-            <option value="Pending">🟡 Pending</option>
-            <option value="Accepted">🔵 Accepted</option>
-            <option value="Completed">🟢 Completed</option>
-            <option value="Rejected">🟠 Rejected</option>
-            <option value="Cancelled">🔴 Cancelled</option>
-          </select>
-
-          <input
-            type="date"
-            placeholder="From"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            style={{
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "15px",
-              minWidth: "150px",
-            }}
-          />
-
-          <input
-            type="date"
-            placeholder="To"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            style={{
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "15px",
-              minWidth: "150px",
-            }}
-          />
-
-          {(bookingSearchTerm || bookingStatusFilter !== "All" || dateFrom || dateTo) && (
-            <button
-              onClick={() => {
-                setBookingSearchTerm("");
-                setBookingStatusFilter("All");
-                setDateFrom("");
-                setDateTo("");
-              }}
-              style={{
-                padding: "12px 18px",
-                backgroundColor: "#e5e7eb",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              Clear Filters
-            </button>
-          )}
-        </div>
-
-        {/* SHOWING COUNT */}
-        {!bookingsLoading && bookings.length > 0 && (
-          <p style={{ marginBottom: "15px", color: "#64748b" }}>
-            Showing <strong>{filteredBookings.length}</strong> booking
-            {filteredBookings.length !== 1 ? "s" : ""}
-            {filteredBookings.length !== bookings.length && (
-              <span> (filtered from {bookings.length} total)</span>
-            )}
-          </p>
-        )}
-
-        {bookingMessage && (
-          <div
-            style={{
-              backgroundColor: bookingMessage.includes("successfully") ? "#dcfce7" : "#fee2e2",
-              color: bookingMessage.includes("successfully") ? "#166534" : "#b91c1c",
-              padding: "15px",
-              borderRadius: "8px",
-              marginBottom: "20px",
-              fontWeight: "bold",
-            }}
-          >
-            {bookingMessage}
-          </div>
-        )}
-
-        {bookingsLoading ? (
-          <div style={emptyCardStyle}>
-            <p>Loading bookings...</p>
-          </div>
-        ) : filteredBookings.length === 0 ? (
-          <div style={emptyCardStyle}>
-            <p>No bookings found matching your criteria.</p>
-          </div>
-        ) : (
-          filteredBookings.map((booking) => (
-            <div
-              key={booking.id}
-              style={{
-                backgroundColor: "white",
-                padding: "20px",
-                marginBottom: "15px",
-                borderRadius: "10px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                cursor: "pointer",
-                transition: "transform 0.2s",
-              }}
-              onClick={() => {
-                setSelectedBooking(booking);
-                setShowModal(true);
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "scale(1.01)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "scale(1)";
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "15px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <h3 style={{ margin: 0, color: "#2563eb" }}>
-                  Booking #{booking.id}
-                </h3>
+              🔔 Notifications
+              {notificationCount > 0 && (
                 <span
                   style={{
-                    padding: "6px 12px",
-                    borderRadius: "20px",
-                    fontWeight: "bold",
-                    backgroundColor:
-                      booking.status === "Pending" ? "#fef3c7" :
-                      booking.status === "Accepted" ? "#dbeafe" :
-                      booking.status === "Completed" ? "#dcfce7" :
-                      booking.status === "Rejected" ? "#ffedd5" :
-                      booking.status === "Cancelled" ? "#fee2e2" : "#f1f5f9",
-                    color:
-                      booking.status === "Pending" ? "#92400e" :
-                      booking.status === "Accepted" ? "#1e40af" :
-                      booking.status === "Completed" ? "#166534" :
-                      booking.status === "Rejected" ? "#c2410c" :
-                      booking.status === "Cancelled" ? "#b91c1c" : "#475569",
-                  }}
-                >
-                  {booking.status}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  marginTop: "15px",
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-                  gap: "10px",
-                }}
-              >
-                <p><strong>👤 Customer:</strong> {booking.customer_name}</p>
-                <p><strong>🔧 Provider:</strong> {booking.provider_name}</p>
-                <p><strong>🛠️ Service:</strong> {booking.service}</p>
-                <p><strong>📅 Date:</strong> {booking.date}</p>
-                <p><strong>⏰ Time:</strong> {booking.time}</p>
-                <p><strong>📍 Address:</strong> {booking.address}</p>
-              </div>
-
-              <div
-                style={{
-                  marginTop: "10px",
-                  padding: "15px",
-                  backgroundColor: "#f8fafc",
-                  borderRadius: "8px",
-                }}
-              >
-                <strong>📝 Description:</strong>
-                <p style={{ marginBottom: 0, color: "#475569" }}>
-                  {booking.description || "No description provided."}
-                </p>
-              </div>
-
-              {/* ADMIN CONTROLS */}
-              <div
-                style={{
-                  marginTop: "15px",
-                  paddingTop: "15px",
-                  borderTop: "1px solid #e2e8f0",
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "10px",
-                  flexWrap: "wrap",
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  onClick={() => handleDeleteBooking(booking.id)}
-                  style={{
-                    padding: "10px 18px",
-                    backgroundColor: "#7f1d1d",
+                    position: "absolute",
+                    top: "-8px",
+                    right: "-8px",
+                    backgroundColor: "#dc2626",
                     color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
+                    borderRadius: "50%",
+                    padding: "3px 7px",
+                    fontSize: "11px",
                     fontWeight: "bold",
+                    minWidth: "20px",
+                    textAlign: "center",
+                    border: "2px solid #f59e0b",
                   }}
                 >
-                  🗑️ Delete Booking
-                </button>
+                  {notificationCount}
+                </span>
+              )}
+            </button>
 
-                {booking.status === "Pending" && (
-                  <>
-                    <button
-                      onClick={() => handleAcceptBooking(booking.id)}
-                      style={controlButtonStyle("#16a34a")}
-                    >
-                      ✅ Accept
-                    </button>
-                    <button
-                      onClick={() => handleRejectBooking(booking.id)}
-                      style={controlButtonStyle("#f97316")}
-                    >
-                      ❌ Reject
-                    </button>
-                    <button
-                      onClick={() => handleCancelBooking(booking.id)}
-                      style={controlButtonStyle("#dc2626")}
-                    >
-                      🚫 Cancel
-                    </button>
-                  </>
-                )}
+            <button className="admin-hero-btn primary" onClick={handleRefresh}>
+              🔄 Refresh
+            </button>
 
-                {booking.status === "Accepted" && (
-                  <button
-                    onClick={() => handleCancelBooking(booking.id)}
-                    style={controlButtonStyle("#dc2626")}
-                  >
-                    🚫 Cancel Booking
-                  </button>
-                )}
-
-                {booking.status === "Completed" && (
-                  <div style={statusMessageStyle("#f0fdf4", "#166534")}>
-                    ✅ Completed
-                  </div>
-                )}
-
-                {booking.status === "Rejected" && (
-                  <div style={statusMessageStyle("#fff7ed", "#c2410c")}>
-                    ❌ Rejected
-                  </div>
-                )}
-
-                {booking.status === "Cancelled" && (
-                  <div style={statusMessageStyle("#fef2f2", "#b91c1c")}>
-                    🚫 Cancelled
-                  </div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
+            <button className="admin-hero-btn danger" onClick={handleLogout}>
+              🚪 Logout
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* ALL USERS */}
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "15px",
-            flexWrap: "wrap",
-            gap: "10px",
-          }}
-        >
-          <h2 style={{ color: "#1e293b" }}>All Users 👥</h2>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              onClick={exportUsersCSV}
-              style={{
-                padding: "8px 16px",
-                backgroundColor: "#16a34a",
-                color: "white",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              📤 Export Users
-            </button>
-            <span
-              style={{
-                backgroundColor: "#e0e7ff",
-                color: "#3730a3",
-                padding: "8px 12px",
-                borderRadius: "20px",
-                fontWeight: "bold",
-              }}
-            >
-              {totalUsers} Users
-            </span>
+      {/* ========== BODY ========== */}
+      <div className="admin-body">
+
+        {/* USER STATS */}
+        <div className="admin-stats">
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#2563eb1a", color: "#2563eb" }}>👥</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{totalUsers}</div>
+              <div className="admin-stat-label">Total Users</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#7c3aed1a", color: "#7c3aed" }}>🙋</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{totalCustomers}</div>
+              <div className="admin-stat-label">Customers</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#16a34a1a", color: "#16a34a" }}>🔧</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{totalProviders}</div>
+              <div className="admin-stat-label">Providers</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#dc26261a", color: "#dc2626" }}>🛡️</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{totalAdmins}</div>
+              <div className="admin-stat-label">Admins</div>
+            </div>
           </div>
         </div>
 
-        {/* USER SEARCH AND FILTER */}
-        <div
-          style={{
-            display: "flex",
-            gap: "10px",
-            marginBottom: "15px",
-            flexWrap: "wrap",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="🔍 Search users by name, email, or ID..."
-            value={userSearchTerm}
-            onChange={(e) => setUserSearchTerm(e.target.value)}
-            style={{
-              flex: 2,
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "15px",
-              minWidth: "200px",
-            }}
-          />
-
-          <select
-            value={userStatusFilter}
-            onChange={(e) => setUserStatusFilter(e.target.value)}
-            style={{
-              flex: 1,
-              padding: "12px",
-              border: "1px solid #ccc",
-              borderRadius: "6px",
-              fontSize: "15px",
-              minWidth: "150px",
-            }}
-          >
-            <option value="All">All Status</option>
-            <option value="Active">🟢 Active</option>
-            <option value="Blocked">🔴 Blocked</option>
-          </select>
-
-          {(userSearchTerm || userStatusFilter !== "All") && (
-            <button
-              onClick={() => {
-                setUserSearchTerm("");
-                setUserStatusFilter("All");
-              }}
-              style={{
-                padding: "12px 18px",
-                backgroundColor: "#e5e7eb",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              Clear Filters
-            </button>
-          )}
+        {/* BOOKING STATS */}
+        <div className="admin-stats">
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#2563eb1a", color: "#2563eb" }}>📋</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{totalBookings}</div>
+              <div className="admin-stat-label">Total Bookings</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#f59e0b1a", color: "#f59e0b" }}>⏳</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{pendingBookings}</div>
+              <div className="admin-stat-label">Pending</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#2563eb1a", color: "#2563eb" }}>✅</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{acceptedBookings}</div>
+              <div className="admin-stat-label">Accepted</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#16a34a1a", color: "#16a34a" }}>🎉</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{completedBookings}</div>
+              <div className="admin-stat-label">Completed</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#ea580c1a", color: "#ea580c" }}>❌</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{rejectedBookings}</div>
+              <div className="admin-stat-label">Rejected</div>
+            </div>
+          </div>
+          <div className="admin-stat">
+            <div className="admin-stat-icon" style={{ background: "#dc26261a", color: "#dc2626" }}>🚫</div>
+            <div className="admin-stat-body">
+              <div className="admin-stat-value">{cancelledBookings}</div>
+              <div className="admin-stat-label">Cancelled</div>
+            </div>
+          </div>
         </div>
 
-        {/* SHOWING COUNT */}
-        {!loading && users.length > 0 && (
-          <p style={{ marginBottom: "15px", color: "#64748b" }}>
-            Showing <strong>{filteredUsers.length}</strong> user
-            {filteredUsers.length !== 1 ? "s" : ""}
-            {filteredUsers.length !== users.length && (
-              <span> (filtered from {users.length} total)</span>
-            )}
-          </p>
-        )}
+        {/* CHARTS */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+            gap: "20px",
+            marginBottom: "20px",
+          }}
+        >
+          <div className="admin-card" style={{ height: "360px" }}>
+            <div className="admin-card-header">
+              <div>
+                <h3 className="admin-card-title">Booking Status Distribution</h3>
+                <p className="admin-card-sub">Live breakdown of every booking</p>
+              </div>
+            </div>
+            <div style={{ height: "270px" }}>
+              {totalBookings > 0 ? (
+                <Pie data={pieChartData} options={chartOptions} />
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
+                  No bookings data available
+                </div>
+              )}
+            </div>
+          </div>
 
-        {/* USER MESSAGE */}
-        {message && (
+          <div className="admin-card" style={{ height: "360px" }}>
+            <div className="admin-card-header">
+              <div>
+                <h3 className="admin-card-title">Booking Overview</h3>
+                <p className="admin-card-sub">Counts by status</p>
+              </div>
+            </div>
+            <div style={{ height: "270px" }}>
+              {totalBookings > 0 ? (
+                <Bar data={barChartData} options={chartOptions} />
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#64748b" }}>
+                  No bookings data available
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ALL BOOKINGS */}
+        <div style={{ marginBottom: "40px" }}>
           <div
             style={{
-              backgroundColor: message.includes("successfully") ? "#dcfce7" : "#fee2e2",
-              color: message.includes("successfully") ? "#166534" : "#b91c1c",
-              padding: "15px",
-              borderRadius: "8px",
-              marginBottom: "20px",
-              fontWeight: "bold",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "15px",
+              flexWrap: "wrap",
+              gap: "10px",
             }}
           >
-            {message}
-          </div>
-        )}
-
-        {loading ? (
-          <div style={emptyCardStyle}>
-            <p>Loading users...</p>
-          </div>
-        ) : filteredUsers.length === 0 ? (
-          <div style={emptyCardStyle}>
-            <p>No users found matching your criteria.</p>
-          </div>
-        ) : (
-          filteredUsers.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                backgroundColor: "white",
-                padding: "20px",
-                marginBottom: "15px",
-                borderRadius: "10px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-              }}
-            >
-              <div
+            <h2 style={{ color: "#1e293b", margin: 0 }}>All Bookings 📋</h2>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                onClick={exportBookingsCSV}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "15px",
-                  flexWrap: "wrap",
+                  padding: "8px 16px",
+                  backgroundColor: "#16a34a",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
                 }}
               >
-                <h3 style={{ marginTop: 0, marginBottom: "10px", color: "#2563eb" }}>
-                  {item.name}
-                </h3>
+                📤 Export Bookings
+              </button>
+              <span
+                style={{
+                  backgroundColor: "#e0e7ff",
+                  color: "#3730a3",
+                  padding: "8px 12px",
+                  borderRadius: "20px",
+                  fontWeight: "bold",
+                }}
+              >
+                {totalBookings} Bookings
+              </span>
+            </div>
+          </div>
 
+          {/* BOOKING SEARCH AND FILTER */}
+          <div style={{ display: "flex", gap: "10px", marginBottom: "15px", flexWrap: "wrap" }}>
+            <input
+              type="text"
+              placeholder="🔍 Search bookings by customer, provider, service, or ID..."
+              value={bookingSearchTerm}
+              onChange={(e) => setBookingSearchTerm(e.target.value)}
+              style={{
+                flex: 2,
+                padding: "12px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                fontSize: "15px",
+                minWidth: "200px",
+              }}
+            />
+            <select
+              value={bookingStatusFilter}
+              onChange={(e) => setBookingStatusFilter(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "12px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                fontSize: "15px",
+                minWidth: "150px",
+              }}
+            >
+              <option value="All">All Status</option>
+              <option value="Pending">🟡 Pending</option>
+              <option value="Accepted">🔵 Accepted</option>
+              <option value="Completed">🟢 Completed</option>
+              <option value="Rejected">🟠 Rejected</option>
+              <option value="Cancelled">🔴 Cancelled</option>
+            </select>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{
+                padding: "12px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                fontSize: "15px",
+                minWidth: "150px",
+              }}
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{
+                padding: "12px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                fontSize: "15px",
+                minWidth: "150px",
+              }}
+            />
+            {(bookingSearchTerm || bookingStatusFilter !== "All" || dateFrom || dateTo) && (
+              <button
+                onClick={() => {
+                  setBookingSearchTerm("");
+                  setBookingStatusFilter("All");
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+                style={{
+                  padding: "12px 18px",
+                  backgroundColor: "#e5e7eb",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          {!bookingsLoading && bookings.length > 0 && (
+            <p style={{ marginBottom: "15px", color: "#64748b" }}>
+              Showing <strong>{filteredBookings.length}</strong> booking
+              {filteredBookings.length !== 1 ? "s" : ""}
+              {filteredBookings.length !== bookings.length && (
+                <span> (filtered from {bookings.length} total)</span>
+              )}
+            </p>
+          )}
+
+          {bookingMessage && (
+            <div
+              style={{
+                backgroundColor: bookingMessage.includes("successfully") ? "#dcfce7" : "#fee2e2",
+                color: bookingMessage.includes("successfully") ? "#166534" : "#b91c1c",
+                padding: "15px",
+                borderRadius: "8px",
+                marginBottom: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              {bookingMessage}
+            </div>
+          )}
+
+          {bookingsLoading ? (
+            <div style={emptyCardStyle}><p>Loading bookings...</p></div>
+          ) : filteredBookings.length === 0 ? (
+            <div style={emptyCardStyle}><p>No bookings found matching your criteria.</p></div>
+          ) : (
+            filteredBookings.map((booking) => (
+              <div
+                key={booking.id}
+                style={{
+                  backgroundColor: "white",
+                  padding: "20px",
+                  marginBottom: "15px",
+                  borderRadius: "10px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                  cursor: "pointer",
+                  transition: "transform 0.2s",
+                }}
+                onClick={() => {
+                  setSelectedBooking(booking);
+                  setShowModal(true);
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
-                    gap: "8px",
+                    justifyContent: "space-between",
                     alignItems: "center",
+                    gap: "15px",
                     flexWrap: "wrap",
                   }}
                 >
+                  <h3 style={{ margin: 0, color: "#2563eb" }}>Booking #{booking.id}</h3>
                   <span
                     style={{
                       padding: "6px 12px",
                       borderRadius: "20px",
+                      fontWeight: "bold",
                       backgroundColor:
-                        item.role === "provider" ? "#dcfce7" :
-                        item.role === "admin" ? "#fef3c7" : "#dbeafe",
+                        booking.status === "Pending" ? "#fef3c7" :
+                        booking.status === "Accepted" ? "#dbeafe" :
+                        booking.status === "Completed" ? "#dcfce7" :
+                        booking.status === "Rejected" ? "#ffedd5" :
+                        booking.status === "Cancelled" ? "#fee2e2" : "#f1f5f9",
                       color:
-                        item.role === "provider" ? "#166534" :
-                        item.role === "admin" ? "#92400e" : "#1e40af",
-                      fontWeight: "bold",
-                      textTransform: "capitalize",
+                        booking.status === "Pending" ? "#92400e" :
+                        booking.status === "Accepted" ? "#1e40af" :
+                        booking.status === "Completed" ? "#166534" :
+                        booking.status === "Rejected" ? "#c2410c" :
+                        booking.status === "Cancelled" ? "#b91c1c" : "#475569",
                     }}
                   >
-                    {item.role}
-                  </span>
-
-                  <span
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "20px",
-                      backgroundColor: item.is_active === 0 ? "#fee2e2" : "#dcfce7",
-                      color: item.is_active === 0 ? "#b91c1c" : "#166534",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {item.is_active === 0 ? "Blocked" : "Active"}
+                    {booking.status}
                   </span>
                 </div>
-              </div>
 
-              <p><strong>Email:</strong> {item.email}</p>
-              <p><strong>User ID:</strong> {item.id}</p>
-
-              {/* PROVIDER DETAILS */}
-              {item.role === "provider" && (
                 <div
                   style={{
                     marginTop: "15px",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                    gap: "10px",
+                  }}
+                >
+                  <p><strong>👤 Customer:</strong> {booking.customer_name}</p>
+                  <p><strong>🔧 Provider:</strong> {booking.provider_name}</p>
+                  <p><strong>🛠️ Service:</strong> {booking.service}</p>
+                  <p><strong>📅 Date:</strong> {booking.date}</p>
+                  <p><strong>⏰ Time:</strong> {booking.time}</p>
+                  <p><strong>📍 Address:</strong> {booking.address}</p>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: "10px",
                     padding: "15px",
                     backgroundColor: "#f8fafc",
                     borderRadius: "8px",
                   }}
                 >
-                  <h4 style={{ marginTop: 0, color: "#334155" }}>Provider Details</h4>
-                  <p><strong>Service:</strong> {item.service || "Not specified"}</p>
-                  <p><strong>Location:</strong> {item.location || "Not specified"}</p>
-                  <p><strong>Experience:</strong> {item.experience || "Not specified"}</p>
-                  <p><strong>Price:</strong> {item.price || "Not specified"}</p>
-                  <p><strong>Availability:</strong> {item.availability || "Available"}</p>
+                  <strong>📝 Description:</strong>
+                  <p style={{ marginBottom: 0, color: "#475569" }}>
+                    {booking.description || "No description provided."}
+                  </p>
                 </div>
-              )}
 
-              {/* BLOCK / UNBLOCK / DELETE BUTTONS */}
-              {item.role !== "admin" && (
+                {/* ADMIN CONTROLS */}
                 <div
                   style={{
-                    marginTop: "20px",
+                    marginTop: "15px",
                     paddingTop: "15px",
                     borderTop: "1px solid #e2e8f0",
                     display: "flex",
@@ -1574,9 +1160,10 @@ function AdminDashboard() {
                     gap: "10px",
                     flexWrap: "wrap",
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onClick={() => handleDeleteUser(item.id, item.name)}
+                    onClick={() => handleDeleteBooking(booking.id)}
                     style={{
                       padding: "10px 18px",
                       backgroundColor: "#7f1d1d",
@@ -1587,29 +1174,286 @@ function AdminDashboard() {
                       fontWeight: "bold",
                     }}
                   >
-                    🗑️ Delete User
+                    🗑️ Delete Booking
                   </button>
 
-                  {item.is_active === 0 ? (
-                    <button
-                      onClick={() => handleUnblockUser(item.id, item.name)}
-                      style={controlButtonStyle("#16a34a")}
-                    >
-                      🔓 Unblock User
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleBlockUser(item.id, item.name)}
-                      style={controlButtonStyle("#dc2626")}
-                    >
-                      🔒 Block User
+                  {booking.status === "Pending" && (
+                    <>
+                      <button onClick={() => handleAcceptBooking(booking.id)} style={controlButtonStyle("#16a34a")}>
+                        ✅ Accept
+                      </button>
+                      <button onClick={() => handleRejectBooking(booking.id)} style={controlButtonStyle("#f97316")}>
+                        ❌ Reject
+                      </button>
+                      <button onClick={() => handleCancelBooking(booking.id)} style={controlButtonStyle("#dc2626")}>
+                        🚫 Cancel
+                      </button>
+                    </>
+                  )}
+
+                  {booking.status === "Accepted" && (
+                    <button onClick={() => handleCancelBooking(booking.id)} style={controlButtonStyle("#dc2626")}>
+                      🚫 Cancel Booking
                     </button>
                   )}
+
+                  {booking.status === "Completed" && (
+                    <div style={statusMessageStyle("#f0fdf4", "#166534")}>✅ Completed</div>
+                  )}
+                  {booking.status === "Rejected" && (
+                    <div style={statusMessageStyle("#fff7ed", "#c2410c")}>❌ Rejected</div>
+                  )}
+                  {booking.status === "Cancelled" && (
+                    <div style={statusMessageStyle("#fef2f2", "#b91c1c")}>🚫 Cancelled</div>
+                  )}
                 </div>
-              )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* ALL USERS */}
+        <div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "15px",
+              flexWrap: "wrap",
+              gap: "10px",
+            }}
+          >
+            <h2 style={{ color: "#1e293b" }}>All Users 👥</h2>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                onClick={exportUsersCSV}
+                style={{
+                  padding: "8px 16px",
+                  backgroundColor: "#16a34a",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                📤 Export Users
+              </button>
+              <span
+                style={{
+                  backgroundColor: "#e0e7ff",
+                  color: "#3730a3",
+                  padding: "8px 12px",
+                  borderRadius: "20px",
+                  fontWeight: "bold",
+                }}
+              >
+                {totalUsers} Users
+              </span>
             </div>
-          ))
-        )}
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", marginBottom: "15px", flexWrap: "wrap" }}>
+            <input
+              type="text"
+              placeholder="🔍 Search users by name, email, or ID..."
+              value={userSearchTerm}
+              onChange={(e) => setUserSearchTerm(e.target.value)}
+              style={{
+                flex: 2,
+                padding: "12px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                fontSize: "15px",
+                minWidth: "200px",
+              }}
+            />
+            <select
+              value={userStatusFilter}
+              onChange={(e) => setUserStatusFilter(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "12px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+                fontSize: "15px",
+                minWidth: "150px",
+              }}
+            >
+              <option value="All">All Status</option>
+              <option value="Active">🟢 Active</option>
+              <option value="Blocked">🔴 Blocked</option>
+            </select>
+            {(userSearchTerm || userStatusFilter !== "All") && (
+              <button
+                onClick={() => {
+                  setUserSearchTerm("");
+                  setUserStatusFilter("All");
+                }}
+                style={{
+                  padding: "12px 18px",
+                  backgroundColor: "#e5e7eb",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+
+          {!loading && users.length > 0 && (
+            <p style={{ marginBottom: "15px", color: "#64748b" }}>
+              Showing <strong>{filteredUsers.length}</strong> user
+              {filteredUsers.length !== 1 ? "s" : ""}
+              {filteredUsers.length !== users.length && (
+                <span> (filtered from {users.length} total)</span>
+              )}
+            </p>
+          )}
+
+          {message && (
+            <div
+              style={{
+                backgroundColor: message.includes("successfully") ? "#dcfce7" : "#fee2e2",
+                color: message.includes("successfully") ? "#166534" : "#b91c1c",
+                padding: "15px",
+                borderRadius: "8px",
+                marginBottom: "20px",
+                fontWeight: "bold",
+              }}
+            >
+              {message}
+            </div>
+          )}
+
+          {loading ? (
+            <div style={emptyCardStyle}><p>Loading users...</p></div>
+          ) : filteredUsers.length === 0 ? (
+            <div style={emptyCardStyle}><p>No users found matching your criteria.</p></div>
+          ) : (
+            filteredUsers.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  backgroundColor: "white",
+                  padding: "20px",
+                  marginBottom: "15px",
+                  borderRadius: "10px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "15px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <h3 style={{ marginTop: 0, marginBottom: "10px", color: "#2563eb" }}>
+                    {item.name}
+                  </h3>
+
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "20px",
+                        backgroundColor:
+                          item.role === "provider" ? "#dcfce7" :
+                          item.role === "admin" ? "#fef3c7" : "#dbeafe",
+                        color:
+                          item.role === "provider" ? "#166534" :
+                          item.role === "admin" ? "#92400e" : "#1e40af",
+                        fontWeight: "bold",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {item.role}
+                    </span>
+                    <span
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "20px",
+                        backgroundColor: item.is_active === 0 ? "#fee2e2" : "#dcfce7",
+                        color: item.is_active === 0 ? "#b91c1c" : "#166534",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {item.is_active === 0 ? "Blocked" : "Active"}
+                    </span>
+                  </div>
+                </div>
+
+                <p><strong>Email:</strong> {item.email}</p>
+                <p><strong>User ID:</strong> {item.id}</p>
+
+                {item.role === "provider" && (
+                  <div
+                    style={{
+                      marginTop: "15px",
+                      padding: "15px",
+                      backgroundColor: "#f8fafc",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <h4 style={{ marginTop: 0, color: "#334155" }}>Provider Details</h4>
+                    <p><strong>Service:</strong> {item.service || "Not specified"}</p>
+                    <p><strong>Location:</strong> {item.location || "Not specified"}</p>
+                    <p><strong>Experience:</strong> {item.experience || "Not specified"}</p>
+                    <p><strong>Price:</strong> {item.price || "Not specified"}</p>
+                    <p><strong>Availability:</strong> {item.availability || "Available"}</p>
+                  </div>
+                )}
+
+                {item.role !== "admin" && (
+                  <div
+                    style={{
+                      marginTop: "20px",
+                      paddingTop: "15px",
+                      borderTop: "1px solid #e2e8f0",
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      gap: "10px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      onClick={() => handleDeleteUser(item.id, item.name)}
+                      style={{
+                        padding: "10px 18px",
+                        backgroundColor: "#7f1d1d",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      🗑️ Delete User
+                    </button>
+
+                    {item.is_active === 0 ? (
+                      <button onClick={() => handleUnblockUser(item.id, item.name)} style={controlButtonStyle("#16a34a")}>
+                        🔓 Unblock User
+                      </button>
+                    ) : (
+                      <button onClick={() => handleBlockUser(item.id, item.name)} style={controlButtonStyle("#dc2626")}>
+                        🔒 Block User
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
       </div>
 
       {/* BOOKING DETAILS MODAL */}
@@ -1681,7 +1525,6 @@ function AdminDashboard() {
             </div>
 
             <hr style={{ margin: "15px 0" }} />
-
             <div style={{ marginBottom: "15px" }}>
               <h4 style={{ color: "#334155" }}>Customer Information</h4>
               <p><strong>Name:</strong> {selectedBooking.customer_name}</p>
@@ -1689,7 +1532,6 @@ function AdminDashboard() {
             </div>
 
             <hr style={{ margin: "15px 0" }} />
-
             <div style={{ marginBottom: "15px" }}>
               <h4 style={{ color: "#334155" }}>Provider Information</h4>
               <p><strong>Name:</strong> {selectedBooking.provider_name}</p>
@@ -1697,7 +1539,6 @@ function AdminDashboard() {
             </div>
 
             <hr style={{ margin: "15px 0" }} />
-
             <div style={{ marginBottom: "15px" }}>
               <h4 style={{ color: "#334155" }}>Booking Details</h4>
               <p><strong>Date:</strong> {selectedBooking.date}</p>
@@ -1706,7 +1547,6 @@ function AdminDashboard() {
             </div>
 
             <hr style={{ margin: "15px 0" }} />
-
             <div>
               <h4 style={{ color: "#334155" }}>Description</h4>
               <p>{selectedBooking.description || "No description provided."}</p>
@@ -1785,16 +1625,6 @@ function AdminDashboard() {
 // STYLES
 // =========================================================
 
-const headerButtonStyle = (backgroundColor) => ({
-  padding: "10px 18px",
-  backgroundColor,
-  color: "white",
-  border: "none",
-  borderRadius: "6px",
-  cursor: "pointer",
-  fontWeight: "bold",
-});
-
 const controlButtonStyle = (backgroundColor) => ({
   padding: "10px 18px",
   backgroundColor,
@@ -1820,30 +1650,6 @@ const emptyCardStyle = {
   padding: "30px",
   borderRadius: "10px",
   textAlign: "center",
-};
-
-const statCardStyle = {
-  backgroundColor: "white",
-  padding: "20px",
-  borderRadius: "10px",
-  textAlign: "center",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-};
-
-const bookingStatCardStyle = {
-  backgroundColor: "white",
-  padding: "20px",
-  borderRadius: "10px",
-  textAlign: "center",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-  borderTop: "4px solid #2563eb",
-};
-
-const statNumberStyle = {
-  fontSize: "32px",
-  fontWeight: "bold",
-  color: "#2563eb",
-  margin: "10px 0 0",
 };
 
 export default AdminDashboard;

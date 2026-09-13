@@ -1,0 +1,817 @@
+/* frontend/src/styles/responsive.css
+   Global mobile responsiveness — applies to every page
+   ========================================================= */
+
+/* ---------- 1. Kill horizontal overflow everywhere ---------- */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+* {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ---------- 2. Fluid typography ---------- */
+@media (max-width: 640px) {
+  html { font-size: 15px; }
+  h1 { font-size: clamp(1.4rem, 6vw, 1.8rem) !important; }
+  h2 { font-size: clamp(1.1rem, 5vw, 1.35rem) !important; }
+  h3 { font-size: clamp(1rem, 4.5vw, 1.15rem) !important; }
+}
+
+/* =========================================================
+   NAVBAR — mobile
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .navbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+
+  .navbar-brand {
+    justify-content: center !important;
+    font-size: 17px !important;
+    padding: 4px 0 !important;
+  }
+
+  .navbar-brand img {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  .navbar-menu {
+    display: flex !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    padding: 4px 8px 8px !important;
+    gap: 6px !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    position: relative;
+  }
+
+  .navbar-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .navbar-menu::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 4px;
+    bottom: 8px;
+    width: 20px;
+    background: linear-gradient(to right, transparent, rgba(37, 99, 235, 0.9));
+    pointer-events: none;
+  }
+
+  .nav-item {
+    flex-shrink: 0 !important;
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+    white-space: nowrap !important;
+    border-radius: 8px !important;
+  }
+
+  .navbar-user {
+    width: 100% !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding-top: 8px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.18) !important;
+  }
+
+  .user-role {
+    font-size: 10px !important;
+    padding: 3px 8px !important;
+  }
+
+  .user-name {
+    font-size: 13px !important;
+    max-width: 120px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .logout-btn {
+    padding: 7px 14px !important;
+    font-size: 12px !important;
+    min-height: auto !important;
+  }
+}
+
+/* =========================================================
+   TABLES — scroll horizontally, never break
+   ========================================================= */
+
+@media (max-width: 900px) {
+  table {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 10px;
+    font-size: 13px !important;
+  }
+
+  th, td {
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+  }
+
+  /* If someone uses div-based "table" */
+  [class*="table"],
+  [class*="list-row"],
+  [class*="user-row"],
+  [class*="data-grid"] {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100% !important;
+  }
+
+  [class*="row"] > * {
+    flex-shrink: 0;
+  }
+}
+
+/* =========================================================
+   CARDS & CONTAINERS
+   ========================================================= */
+
+@media (max-width: 768px) {
+  .card {
+    padding: 16px !important;
+    border-radius: 12px !important;
+    margin-bottom: 12px !important;
+    max-width: 100% !important;
+  }
+
+  .card-title {
+    font-size: 15px !important;
+  }
+
+  [class*="page"],
+  [class*="container"],
+  [class*="body"],
+  [class*="main"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    max-width: 100% !important;
+  }
+}
+
+/* =========================================================
+   HIDE FIXED SIDEBARS / DRAWERS on mobile
+   ========================================================= */
+
+@media (max-width: 900px) {
+  [class*="sidebar"],
+  [class*="drawer"] {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   STAT GRIDS
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .stat-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .stat-card {
+    padding: 12px 8px !important;
+  }
+  .stat-value {
+    font-size: 18px !important;
+  }
+  .stat-label {
+    font-size: 11px !important;
+  }
+  .stat-icon {
+    font-size: 20px !important;
+  }
+}
+
+/* =========================================================
+   PROFILE PAGE
+   ========================================================= */
+
+@media (max-width: 768px) {
+  .profile-hero {
+    padding: 24px 16px 64px !important;
+  }
+
+  .profile-hero-inner {
+    flex-direction: column;
+    text-align: center;
+    gap: 14px;
+  }
+
+  .profile-avatar {
+    width: 80px !important;
+    height: 80px !important;
+    font-size: 30px !important;
+    margin: 0 auto;
+  }
+
+  .profile-name {
+    font-size: 20px !important;
+  }
+
+  .profile-sub {
+    font-size: 13px !important;
+  }
+
+  .profile-hero-actions {
+    margin: 8px 0 0 !important;
+    width: 100%;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .profile-hero-actions button {
+    width: 100% !important;
+  }
+
+  .profile-body {
+    margin-top: -44px !important;
+    padding: 0 12px !important;
+    gap: 12px !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .info-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 3px !important;
+    padding: 8px 0 !important;
+  }
+
+  .info-value {
+    text-align: left !important;
+    word-break: break-word;
+  }
+}
+
+/* =========================================================
+   FORMS
+   ========================================================= */
+
+@media (max-width: 640px) {
+  .field-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .field-input,
+  .form-input,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+    padding: 12px 14px !important;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+
+  form {
+    max-width: 100%;
+  }
+}
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .btn-primary,
+  .btn-ghost,
+  .btn-hero {
+    min-height: 42px;
+    font-size: 14px !important;
+    padding: 10px 16px !important;
+  }
+}
+
+/* =========================================================
+   OTP
+   ========================================================= */
+
+@media (max-width: 400px) {
+  .otp-inputs {
+    gap: 6px !important;
+  }
+  .otp-inputs input {
+    width: 40px !important;
+    height: 48px !important;
+    font-size: 18px !important;
+  }
+}
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+@media (max-width: 480px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* =========================================================
+   MOBILE PRO — extras
+   ========================================================= */
+
+/* Make ALL touch targets bigger */
+@media (max-width: 900px) {
+  button:not(.navbar-hamburger):not(.tab-item),
+  a[class*="btn"],
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Fullscreen modals on mobile */
+  [class*="modal"] [class*="content"],
+  [class*="Modal"] [class*="content"],
+  [class*="modal"] > div {
+    max-width: 100vw !important;
+    width: 100% !important;
+    border-radius: 16px 16px 0 0 !important;
+    max-height: 92vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* Sticky action buttons inside forms */
+  [class*="sticky-action"] {
+    position: sticky;
+    bottom: 68px;
+    background: white;
+    padding: 12px 16px;
+    border-top: 1px solid #e5e7eb;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+    margin: 12px -16px -16px;
+    z-index: 100;
+  }
+}
+
+/* Prevent iOS input zoom (needs 16px+) */
+@media (max-width: 900px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Horizontal scroll snap for card rails */
+@media (max-width: 900px) {
+  [class*="rail"],
+  [class*="scroll-x"] {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  [class*="rail"] > *,
+  [class*="scroll-x"] > * {
+    scroll-snap-align: start;
+  }
+}
+
+/* Hide long footer stuff on mobile */
+@media (max-width: 640px) {
+  footer [class*="desktop"],
+  .footer-desktop {
+    display: none !important;
+  }
+}
+
+/* =========================================================
+   REUSABLE PAGE HERO — used on every page top
+   ========================================================= */
+
+.page-hero {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  padding: 36px 20px 76px;
+  position: relative;
+  overflow: hidden;
+}
+
+.page-hero::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 70%);
+  pointer-events: none;
+}
+
+.page-hero-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.page-hero-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.page-hero-title {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: white;
+}
+
+.page-hero-sub {
+  margin: 0;
+  color: #dbeafe;
+  font-size: 14px;
+}
+
+.page-hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.page-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  font-family: inherit;
+  color: white;
+}
+
+.page-hero-btn.primary {
+  background: white;
+  color: #1d4ed8;
+}
+
+.page-hero-btn.primary:hover {
+  background: #f1f5f9;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.page-hero-btn.warn {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.page-hero-btn.warn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.4);
+}
+
+.page-hero-btn.ghost {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.page-hero-btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.page-hero-btn.danger {
+  background: #dc2626;
+}
+
+.page-hero-btn.danger:hover {
+  background: #b91c1c;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(220, 38, 38, 0.4);
+}
+
+/* Page body — sits on top of the hero with a slight upward pull */
+.page-body {
+  max-width: 1100px;
+  margin: -50px auto 40px;
+  padding: 0 20px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Content card — used for lists/filters below the hero */
+.page-card {
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+  .page-hero {
+    padding: 26px 16px 66px;
+  }
+
+  .page-hero-title {
+    font-size: 22px;
+  }
+
+  .page-hero-sub {
+    font-size: 13px;
+  }
+
+  .page-hero-actions {
+    margin-top: 14px;
+    gap: 8px;
+  }
+
+  .page-hero-btn {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    padding: 11px 12px;
+    font-size: 12.5px;
+  }
+
+  .page-body {
+    margin-top: -46px;
+    padding: 0 14px;
+  }
+
+  .page-card {
+    padding: 16px;
+  }
+}
+
+/* =========================================================
+   KILL EMPTY TOP SPACE ON ALL PAGES (mobile)
+   ========================================================= */
+
+@media (max-width: 900px) {
+  /* Remove top padding/margin on common page wrappers */
+  .notifications-page,
+  .profile-root,
+  .my-bookings-page,
+  .my-payments-page,
+  .my-reviews-page,
+  .providers-page,
+  .services-page,
+  .admin-users,
+  .admin-bookings,
+  .admin-reviews {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+
+  /* Kill any page's initial empty wrapper */
+  .main-content > div:first-child {
+    margin-top: 0 !important;
+  }
+
+  /* Remove gap between navbar and page content */
+  .main-content {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+
+  /* Compact any leftover page headers */
+  [class*="-header"] {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+}
+
+/* =========================================================
+   Give every page a clean title bar (mobile + desktop)
+   ========================================================= */
+
+@media (max-width: 900px) {
+  /* If a page doesn't have a hero, add space above content */
+  .main-content {
+    background: #f5f7fb;
+  }
+}
+
+/* =========================================================
+   FLUSH HERO — connect page heroes to the navbar
+   Removes the empty gap between navbar and hero
+   ========================================================= */
+
+/* Remove default body padding that creates the gap */
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Main content wrapper should start right under the sticky navbar */
+.main-content {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* HomeFeed / Dashboard heroes — flush with navbar */
+.dash-hero,
+.page-hero,
+.provider-hero,
+.hero {
+  margin-top: 0 !important;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* Any outer page wrapper */
+[class$="-root"],
+[class$="-page"],
+[class$="-dashboard"] {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* Remove any decorative gap divs */
+.main-content > div:first-child {
+  margin-top: 0 !important;
+}
+
+/* =========================================================
+   FIX CONTENT OVERFLOW ON MOBILE
+   ========================================================= */
+
+@media (max-width: 900px) {
+  /* Every text element wraps cleanly */
+  * {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* No element wider than the viewport */
+  html, body, #root, .app {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Kill any fixed-width containers */
+  [class*="-container"],
+  [class*="-wrapper"],
+  [class*="-card"] {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Any heading wraps */
+  h1, h2, h3, h4 {
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  /* Paragraphs */
+  p {
+    word-break: break-word;
+    max-width: 100%;
+  }
+
+  /* Tables and grids scroll horizontally */
+  table, pre, code {
+    max-width: 100%;
+    overflow-x: auto;
+    display: block;
+  }
+
+  /* Buttons don't overflow */
+  button {
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* Long email addresses / URLs */
+  [class*="email"],
+  [class*="url"],
+  [class*="link"] {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  /* Hero text never too big */
+  [class*="hero"] h1,
+  [class*="hero"] h2 {
+    font-size: clamp(18px, 5vw, 26px) !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Big numbers in stat cards */
+  [class*="stat-value"],
+  [class*="stat-number"] {
+    font-size: clamp(20px, 5vw, 28px) !important;
+  }
+}
+
+/* Super narrow — anything wider than 360px gets wrapped */
+@media (max-width: 400px) {
+  .provider-dashboard,
+  .provider-dashboard * {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Buttons go full width on tiny screens */
+  [class*="btn"],
+  [class*="action"] button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+/* =========================================================
+   PROVIDER DASHBOARD — mobile optimization
+   ========================================================= */
+
+@media (max-width: 768px) {
+  /* Make sure hero content wraps cleanly */
+  [class*="provider"] h1,
+  [class*="provider"] h2 {
+    font-size: clamp(20px, 5.5vw, 26px) !important;
+    line-height: 1.15 !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* Action buttons in hero wrap into 2 columns */
+  [class*="provider"] [class*="action"],
+  [class*="provider"] [class*="buttons"] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* Or fall back to full-width stacked */
+  [class*="provider"] > div > button,
+  [class*="provider"] [class*="btn"] {
+    padding: 11px 14px !important;
+    font-size: 13px !important;
+    justify-content: center !important;
+  }
+
+  /* Cards fit the viewport */
+  [class*="provider"] [class*="card"] {
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+}
+
+@media (max-width: 400px) {
+  [class*="provider"] [class*="action"],
+  [class*="provider"] [class*="buttons"] {
+    grid-template-columns: 1fr !important;
+  }
+}

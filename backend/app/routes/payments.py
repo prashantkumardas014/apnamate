@@ -1,5 +1,6 @@
 # backend/app/routes/payments.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel
@@ -11,8 +12,20 @@ from io import BytesIO
 import base64
 
 from app.database import get_db
-from app.models import User, Booking, Payment, Notification, ProviderPayout
+from app.models import (
+    User, Booking, Payment, Notification, ProviderPayout,
+    Bill, EmailLog, AdminLog,
+)
 from app.auth import get_current_user
+
+# ✅ Services for bills and emails
+from app.services.email_service import send_email, render_template
+from app.services.bill_service import (
+    generate_bill_pdf,
+    generate_bill_number,
+    generate_customer_bill_pdf,
+    generate_provider_bill_pdf,
+)
 
 router = APIRouter()
 
@@ -24,10 +37,14 @@ UPI_ID = os.getenv("UPI_ID", "pd5935306@oksbi")
 UPI_PHONE = os.getenv("UPI_PHONE", "7069112526")
 UPI_NAME = os.getenv("UPI_NAME", "ApnaMate")
 
-COMMISSION_RATE = 0.10   # 10% platform cut. Set 0 to keep all for provider.
+COMMISSION_RATE = 0.10   # 10% platform cut
 
 ALLOWED_GATEWAYS = {"upi", "cash", "card", "razorpay"}
-PAYABLE_BOOKING_STATUSES = {"accepted", "confirmed", "Accepted", "Confirmed"}
+
+PAYABLE_BOOKING_STATUSES = {
+    "accepted", "confirmed", "Accepted", "Confirmed",
+    "payment_pending", "pending_verification",
+}
 
 # ==============================
 # SCHEMAS
@@ -135,13 +152,21 @@ async def create_payment(
         if not booking.quoted_amount or float(booking.quoted_amount) <= 0:
             raise HTTPException(400, "Booking has no quote. Wait for provider to send a quote.")
 
+        # ✅ STRICT: quote is the only source of truth
         quoted_rupees = float(booking.quoted_amount)
         quoted_int = to_rupees_int(quoted_rupees)
 
+        if quoted_int <= 0:
+            raise HTTPException(400, f"Invalid quoted amount: {booking.quoted_amount}")
+
         if payment_data.amount is not None:
-            client = float(payment_data.amount)
-            if abs(client - quoted_rupees) > 0.01:
-                raise HTTPException(400, f"Amount mismatch. Quoted ₹{quoted_rupees:.2f}, received ₹{client:.2f}.")
+            client_int = to_rupees_int(payment_data.amount)
+            if client_int != quoted_int:
+                raise HTTPException(
+                    400,
+                    f"Amount mismatch: quote is ₹{quoted_int}, but request has ₹{client_int}. "
+                    f"Refusing to create payment."
+                )
 
         existing_completed = db.query(Payment).filter(
             Payment.booking_id == booking.id,
@@ -154,19 +179,20 @@ async def create_payment(
             Payment.booking_id == booking.id,
             Payment.user_id == current_user.id,
             Payment.status.in_(["pending", "pending_cash", "pending_card", "awaiting_verification"]),
-            Payment.gateway == gateway,
         ).first()
 
         if existing_pending:
             new_payment = existing_pending
             new_payment.amount = quoted_int
+            new_payment.gateway = gateway
             new_payment.updated_at = datetime.now()
             db.commit()
+            db.refresh(new_payment)
         else:
             new_payment = Payment(
                 booking_id=booking.id,
                 user_id=current_user.id,
-                provider_id=booking.provider_id,
+                provider_id=booking.provider_id or 0,
                 amount=quoted_int,
                 currency=payment_data.currency or "INR",
                 gateway=gateway,
@@ -212,13 +238,14 @@ async def create_payment(
             new_payment.gateway_order_id = f"COD_{booking.id}_{int(datetime.now().timestamp())}"
             db.commit()
 
-            create_notification(
-                user_id=booking.provider_id,
-                title="💰 New COD Booking",
-                message=f"COD booking from {current_user.name}. Amount ₹{quoted_rupees:.0f}. Booking #{booking.id}",
-                db=db, booking_id=booking.id,
-            )
-            db.commit()
+            if booking.provider_id:
+                create_notification(
+                    user_id=booking.provider_id,
+                    title="💰 New COD Booking",
+                    message=f"COD booking from {current_user.name}. Amount ₹{quoted_rupees:.0f}. Booking #{booking.id}",
+                    db=db, booking_id=booking.id,
+                )
+                db.commit()
 
             return {
                 "success": True,
@@ -261,9 +288,9 @@ async def verify_payment(
     db: Session = Depends(get_db),
 ):
     """
-    submit        → CUSTOMER claims paid → awaiting_verification
-    admin_confirm → OWNER sees money     → completed + booking.paid + payout owed
-    reject        → OWNER rejects        → pending
+    submit        → CUSTOMER claims paid → awaiting_verification + booking payment_pending
+    admin_confirm → ADMIN sees money     → completed + booking.paid + payout + bill + emails
+    reject        → ADMIN rejects        → pending + booking back to accepted
     """
     try:
         payment = None
@@ -289,10 +316,21 @@ async def verify_payment(
 
         # ---------- SUBMIT ----------
         if action == "submit":
-            if not is_owner:
+            if not is_owner and not is_admin:
                 raise HTTPException(403, "Only the customer can submit payment proof")
+
+            if booking and booking.quoted_amount:
+                quote_int = to_rupees_int(booking.quoted_amount)
+                if quote_int != int(payment.amount):
+                    raise HTTPException(
+                        400,
+                        f"Payment amount (₹{int(payment.amount)}) does not match booking quote "
+                        f"(₹{quote_int}). Please re-initiate payment."
+                    )
+
             if payment.status == "completed":
                 return {"success": True, "payment_id": payment.id, "status": "completed"}
+
             if payment.status == "awaiting_verification":
                 return {"success": True, "payment_id": payment.id, "status": "awaiting_verification"}
 
@@ -301,6 +339,11 @@ async def verify_payment(
             payment.utr_number = verify_data.transaction_id
             payment.gateway_payment_id = verify_data.transaction_id or "UPI_MANUAL"
             payment.updated_at = datetime.now()
+
+            if booking:
+                booking.status = "payment_pending"
+                booking.updated_at = datetime.now()
+
             db.commit()
 
             admins = db.query(User).filter(User.role == "admin").all()
@@ -315,7 +358,7 @@ async def verify_payment(
 
             return {
                 "success": True,
-                "message": f"₹{amount_rupees:.0f} submitted. Owner will verify shortly.",
+                "message": f"₹{amount_rupees:.0f} submitted. Admin will verify shortly.",
                 "payment_id": payment.id,
                 "status": "awaiting_verification",
                 "amount": amount_rupees,
@@ -325,58 +368,230 @@ async def verify_payment(
         if action == "admin_confirm":
             if not is_admin:
                 raise HTTPException(403, "Admin only")
+
             if payment.status == "completed":
                 return {"success": True, "payment_id": payment.id, "status": "completed"}
+
             if payment.status != "awaiting_verification":
                 raise HTTPException(400, f"Cannot confirm payment in status '{payment.status}'")
 
+            if booking and booking.quoted_amount:
+                quote_int = to_rupees_int(booking.quoted_amount)
+                if quote_int != int(payment.amount):
+                    raise HTTPException(
+                        400,
+                        f"Cannot approve: payment ₹{int(payment.amount)} != booking quote ₹{quote_int}"
+                    )
+
+            # ---- 1. Update payment + booking ----
             payment.status = "completed"
             payment.completed_at = datetime.now()
             payment.updated_at = datetime.now()
+            payment.verified_by = current_user.id
+            payment.verified_at = datetime.now()
 
             if booking:
                 booking.status = "paid"
                 booking.paid_at = datetime.now()
+                booking.paid_amount = int(amount_rupees)
                 booking.updated_at = datetime.now()
 
-            commission = round(amount_rupees * COMMISSION_RATE, 2)
-            net = round(amount_rupees - commission, 2)
+            # ---- 2. Create payout row ----
+            payout = None
+            commission = 0.0
+            net_to_provider = 0.0
 
-            payout = ProviderPayout(
-                provider_id=payment.provider_id,
+            if payment.provider_id:
+                commission = round(amount_rupees * COMMISSION_RATE, 2)
+                net_to_provider = round(amount_rupees - commission, 2)
+
+                payout = ProviderPayout(
+                    provider_id=payment.provider_id,
+                    booking_id=payment.booking_id,
+                    payment_id=payment.id,
+                    amount=amount_rupees,
+                    commission=commission,
+                    net_amount=net_to_provider,
+                    status="owed",
+                    created_at=datetime.now(),
+                )
+                db.add(payout)
+                db.commit()
+                db.refresh(payout)
+
+            # ---- 3. Create immutable Bill ----
+            customer = db.query(User).filter(User.id == payment.user_id).first()
+            provider = (
+                db.query(User).filter(User.id == payment.provider_id).first()
+                if payment.provider_id else None
+            )
+
+            bill = Bill(
+                bill_number=generate_bill_number(booking.id if booking else payment.booking_id),
+                version=1,
                 booking_id=payment.booking_id,
                 payment_id=payment.id,
-                amount=amount_rupees,
+                customer_id=payment.user_id,
+                provider_id=payment.provider_id,
+                quoted_amount=float(booking.quoted_amount) if booking and booking.quoted_amount else amount_rupees,
+                paid_amount=amount_rupees,
                 commission=commission,
-                net_amount=net,
-                status="owed",
-                created_at=datetime.now(),
+                net_to_provider=net_to_provider,
+                currency=payment.currency or "INR",
+                customer_name=customer.name if customer else "Customer",
+                customer_email=customer.email if customer else "",
+                provider_name=provider.name if provider else None,
+                service=booking.service if booking else "Service",
+                booking_date=booking.date if booking else datetime.now().strftime("%Y-%m-%d"),
+                gateway=payment.gateway,
+                utr_number=payment.utr_number or payment.upi_txn_ref,
+                verified_by_admin_id=current_user.id,
+                issued_at=datetime.now(),
+                email_status="pending",
             )
-            db.add(payout)
+            db.add(bill)
             db.commit()
-            db.refresh(payout)
+            db.refresh(bill)
 
+            # ---- 4. Admin audit log ----
+            try:
+                db.add(AdminLog(
+                    admin_id=current_user.id,
+                    action="approve_payment",
+                    target_type="payment",
+                    target_id=payment.id,
+                    details=f"Bill {bill.bill_number} · ₹{amount_rupees} · booking #{payment.booking_id}",
+                    created_at=datetime.now(),
+                ))
+                db.commit()
+            except Exception as log_err:
+                print(f"⚠️ AdminLog failed: {log_err}")
+                db.rollback()
+
+            # ---- 5. Generate PDFs + send emails ----
+            try:
+                # ✅ Role-aware PDFs: customer sees receipt only, provider sees payout
+                customer_pdf = generate_customer_bill_pdf(bill)
+                provider_pdf = generate_provider_bill_pdf(bill)
+
+                email_ok_customer = True
+                email_ok_provider = True
+
+                # Customer email
+                if customer and customer.email:
+                    html_c = render_template(
+                        "bill_customer.html",
+                        subject=f"Payment Confirmed — Booking #{bill.booking_id}",
+                        bill=bill,
+                        fallback_text=f"Payment of ₹{bill.paid_amount} confirmed. Bill: {bill.bill_number}",
+                    )
+                    result_c = send_email(
+                        to_email=customer.email,
+                        subject=f"✅ ApnaMate Payment Confirmed — Bill {bill.bill_number}",
+                        html_body=html_c,
+                        text_body=(
+                            f"Your payment of ₹{bill.paid_amount} for booking "
+                            f"#{bill.booking_id} is confirmed. Bill {bill.bill_number}."
+                        ),
+                        attachments=[{
+                            "data": customer_pdf,
+                            "maintype": "application",
+                            "subtype": "pdf",
+                            "filename": f"ApnaMate-Bill-{bill.bill_number}.pdf",
+                        }],
+                        db=db,
+                        template="bill_customer",
+                        bill_id=bill.id,
+                        booking_id=bill.booking_id,
+                    )
+                    email_ok_customer = result_c["success"]
+                    if email_ok_customer:
+                        bill.emailed_to_customer_at = datetime.now()
+                    else:
+                        bill.email_error = result_c.get("error")
+
+                # Provider email
+                if provider and provider.email:
+                    html_p = render_template(
+                        "bill_provider.html",
+                        subject=f"Payment Received — Booking #{bill.booking_id}",
+                        bill=bill,
+                        fallback_text=f"Payment received for booking #{bill.booking_id}.",
+                    )
+                    result_p = send_email(
+                        to_email=provider.email,
+                        subject=f"💵 ApnaMate Payment Received — Booking #{bill.booking_id}",
+                        html_body=html_p,
+                        text_body=(
+                            f"Payment of ₹{bill.paid_amount} received for booking "
+                            f"#{bill.booking_id}. Your share: ₹{bill.net_to_provider}."
+                        ),
+                        attachments=[{
+                            "data": provider_pdf,
+                            "maintype": "application",
+                            "subtype": "pdf",
+                            "filename": f"ApnaMate-Receipt-{bill.bill_number}.pdf",
+                        }],
+                        db=db,
+                        template="bill_provider",
+                        bill_id=bill.id,
+                        booking_id=bill.booking_id,
+                    )
+                    email_ok_provider = result_p["success"]
+                    if email_ok_provider:
+                        bill.emailed_to_provider_at = datetime.now()
+                    else:
+                        bill.email_error = (bill.email_error or "") + " | " + str(result_p.get("error"))
+
+                # Update overall status
+                if email_ok_customer and email_ok_provider:
+                    bill.email_status = "sent"
+                elif email_ok_customer or email_ok_provider:
+                    bill.email_status = "partial"
+                else:
+                    bill.email_status = "failed"
+                db.commit()
+
+            except Exception as e:
+                print(f"⚠️ Bill email failed: {e}")
+                bill.email_status = "failed"
+                bill.email_error = str(e)
+                db.commit()
+
+            # ---- 6. Notifications ----
             create_notification(
                 user_id=payment.user_id,
                 title="✅ Payment Confirmed!",
-                message=f"₹{amount_rupees:.0f} payment for booking #{payment.booking_id} is confirmed.",
+                message=(
+                    f"₹{amount_rupees:.0f} payment for booking #{payment.booking_id} "
+                    f"is confirmed. Bill {bill.bill_number} emailed to you."
+                ),
                 db=db, booking_id=payment.booking_id,
             )
-            create_notification(
-                user_id=payment.provider_id,
-                title="💵 Payout Recorded",
-                message=f"₹{net:.0f} will be paid to you for booking #{payment.booking_id} (commission ₹{commission:.0f}).",
-                db=db, booking_id=payment.booking_id,
-            )
+
+            if payment.provider_id and payout:
+                create_notification(
+                    user_id=payment.provider_id,
+                    title="💵 Payout Recorded",
+                    message=(
+                        f"₹{float(payout.net_amount):.0f} will be paid to you for "
+                        f"booking #{payment.booking_id} (commission ₹{float(payout.commission):.0f})."
+                    ),
+                    db=db, booking_id=payment.booking_id,
+                )
+
             db.commit()
 
             return {
                 "success": True,
-                "message": f"₹{amount_rupees:.0f} confirmed. ₹{net:.0f} payout recorded.",
+                "message": f"₹{amount_rupees:.0f} confirmed. Bill {bill.bill_number} created and emailed.",
                 "payment_id": payment.id,
                 "status": "completed",
                 "amount": amount_rupees,
-                "payout_id": payout.id,
+                "payout_id": payout.id if payout else None,
+                "bill_id": bill.id,
+                "bill_number": bill.bill_number,
+                "email_status": bill.email_status,
             }
 
         # ---------- ADMIN REJECT ----------
@@ -389,8 +604,29 @@ async def verify_payment(
             payment.upi_txn_ref = None
             payment.utr_number = None
             payment.gateway_payment_id = None
+            payment.rejection_reason = reason
             payment.updated_at = datetime.now()
+
+            if booking:
+                booking.status = "accepted"
+                booking.updated_at = datetime.now()
+
             db.commit()
+
+            # Audit log
+            try:
+                db.add(AdminLog(
+                    admin_id=current_user.id,
+                    action="reject_payment",
+                    target_type="payment",
+                    target_id=payment.id,
+                    details=f"Reason: {reason} · booking #{payment.booking_id}",
+                    created_at=datetime.now(),
+                ))
+                db.commit()
+            except Exception as log_err:
+                print(f"⚠️ AdminLog failed: {log_err}")
+                db.rollback()
 
             create_notification(
                 user_id=payment.user_id,
@@ -400,8 +636,12 @@ async def verify_payment(
             )
             db.commit()
 
-            return {"success": True, "message": "Rejected. Customer notified.",
-                    "payment_id": payment.id, "status": "pending"}
+            return {
+                "success": True,
+                "message": "Rejected. Customer notified.",
+                "payment_id": payment.id,
+                "status": "pending",
+            }
 
         raise HTTPException(400, f"Unknown action: {action}")
 
@@ -410,6 +650,48 @@ async def verify_payment(
     except Exception as e:
         db.rollback()
         raise HTTPException(500, f"Error: {str(e)}")
+
+
+# ==============================
+# ADMIN — convenience aliases
+# ==============================
+
+@router.post("/payments/admin/{payment_id}/approve")
+async def admin_approve_payment(
+    payment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Alias for verify(action='admin_confirm')."""
+    return await verify_payment(
+        verify_data=PaymentVerify(
+            gateway="upi",
+            payment_id=payment_id,
+            action="admin_confirm",
+        ),
+        current_user=current_user,
+        db=db,
+    )
+
+
+@router.post("/payments/admin/{payment_id}/reject")
+async def admin_reject_payment(
+    payment_id: int,
+    reason: str = "",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Alias for verify(action='reject')."""
+    return await verify_payment(
+        verify_data=PaymentVerify(
+            gateway="upi",
+            payment_id=payment_id,
+            action="reject",
+            notes=reason or "Payment proof invalid",
+        ),
+        current_user=current_user,
+        db=db,
+    )
 
 
 # ==============================
@@ -449,7 +731,7 @@ async def upload_screenshot(
 
 
 # ==============================
-# ADMIN — pending verification
+# ADMIN — pending verification list
 # ==============================
 
 @router.get("/payments/admin/pending-verification")
@@ -468,14 +750,29 @@ async def admin_pending_verifications(
     for p in rows:
         customer = db.query(User).filter(User.id == p.user_id).first()
         booking = db.query(Booking).filter(Booking.id == p.booking_id).first()
+
+        booking_quoted = (
+            float(booking.quoted_amount)
+            if booking and booking.quoted_amount is not None
+            else None
+        )
+        payment_amount = to_rupees_float(p.amount)
+        matches = (
+            booking_quoted is not None
+            and int(booking_quoted) == int(payment_amount)
+        )
+
         out.append({
             "payment_id": p.id,
             "booking_id": p.booking_id,
-            "amount": to_rupees_float(p.amount),
+            "amount": payment_amount,
+            "booking_quoted": booking_quoted,
+            "amount_matches_quote": matches,
             "gateway": p.gateway,
             "utr": p.utr_number or p.upi_txn_ref,
             "screenshot_url": p.screenshot_url,
-            "submitted_at": p.updated_at.isoformat() if p.updated_at else None,
+            "submitted_at": (p.updated_at or p.created_at).isoformat()
+                if (p.updated_at or p.created_at) else None,
             "customer": {
                 "name": customer.name if customer else "Unknown",
                 "email": customer.email if customer else None,
@@ -483,7 +780,7 @@ async def admin_pending_verifications(
             "booking": {
                 "service": booking.service if booking else None,
                 "date": booking.date if booking else None,
-                "quoted_amount": float(booking.quoted_amount) if booking and booking.quoted_amount else None,
+                "quoted_amount": booking_quoted,
             },
         })
     return {"success": True, "count": len(out), "payments": out}
@@ -630,7 +927,7 @@ async def provider_save_upi(
 
 
 # ==============================
-# GET payment status (unchanged, but rounded)
+# GET payment status
 # ==============================
 
 @router.get("/payments/booking/{booking_id}")
@@ -695,3 +992,340 @@ async def get_my_payments(
             } for p in rows
         ],
     }
+
+
+# ==============================
+# BILLS — list / get / download
+# ==============================
+
+@router.get("/payments/bills/my")
+async def list_my_bills(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List bills where the current user is a party (customer or provider)."""
+    q = db.query(Bill)
+    if current_user.role == "admin":
+        pass
+    elif current_user.role == "provider":
+        q = q.filter(Bill.provider_id == current_user.id)
+    else:
+        q = q.filter(Bill.customer_id == current_user.id)
+
+    rows = q.order_by(Bill.issued_at.desc()).all()
+
+    return {
+        "success": True,
+        "count": len(rows),
+        "bills": [
+            {
+                "bill_id": b.id,
+                "bill_number": b.bill_number,
+                "booking_id": b.booking_id,
+                "paid_amount": float(b.paid_amount),
+                "service": b.service,
+                "issued_at": b.issued_at.isoformat() if b.issued_at else None,
+                "email_status": b.email_status,
+            }
+            for b in rows
+        ],
+    }
+
+
+# ✅ NEW: auto-backfill + list all bills for current user
+@router.get("/payments/bills/all")
+async def list_all_my_bills(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    List ALL bills for the current user, and auto-generate any
+    missing bills from paid/completed bookings first.
+    """
+    # ---------- 1. Auto-backfill missing bills ----------
+    backfilled = 0
+    try:
+        q = db.query(Booking).filter(
+            Booking.status.in_(["paid", "completed", "Completed"])
+        )
+        if current_user.role == "provider":
+            q = q.filter(Booking.provider_id == current_user.id)
+        elif current_user.role == "customer":
+            q = q.filter(Booking.customer_id == current_user.id)
+        # admin sees everything
+
+        paid_bookings = q.all()
+
+        for booking in paid_bookings:
+            existing = db.query(Bill).filter(Bill.booking_id == booking.id).first()
+            if existing:
+                continue
+
+            payment = (
+                db.query(Payment)
+                .filter(Payment.booking_id == booking.id, Payment.status == "completed")
+                .order_by(Payment.created_at.desc())
+                .first()
+            )
+            if not payment:
+                continue
+
+            customer = db.query(User).filter(User.id == payment.user_id).first()
+            provider = (
+                db.query(User).filter(User.id == payment.provider_id).first()
+                if payment.provider_id else None
+            )
+
+            amount = float(payment.amount)
+            commission = round(amount * COMMISSION_RATE, 2)
+            net = round(amount - commission, 2)
+
+            try:
+                new_bill = Bill(
+                    bill_number=generate_bill_number(booking.id),
+                    version=1,
+                    booking_id=booking.id,
+                    payment_id=payment.id,
+                    customer_id=payment.user_id,
+                    provider_id=payment.provider_id,
+                    quoted_amount=float(booking.quoted_amount or amount),
+                    paid_amount=amount,
+                    commission=commission,
+                    net_to_provider=net,
+                    currency="INR",
+                    customer_name=customer.name if customer else "Customer",
+                    customer_email=customer.email if customer else "",
+                    provider_name=provider.name if provider else None,
+                    service=booking.service,
+                    booking_date=booking.date,
+                    gateway=payment.gateway,
+                    utr_number=payment.utr_number or payment.upi_txn_ref,
+                    verified_by_admin_id=payment.verified_by,
+                    issued_at=payment.completed_at or datetime.now(),
+                    email_status="pending",
+                )
+                db.add(new_bill)
+                db.commit()
+                backfilled += 1
+            except Exception as bf_err:
+                db.rollback()
+                print(f"⚠️ Backfill failed for booking {booking.id}: {bf_err}")
+
+    except Exception as e:
+        print(f"⚠️ Backfill loop error: {e}")
+        db.rollback()
+
+    # ---------- 2. Fetch all bills for this user ----------
+    bq = db.query(Bill)
+    if current_user.role == "provider":
+        bq = bq.filter(Bill.provider_id == current_user.id)
+    elif current_user.role == "customer":
+        bq = bq.filter(Bill.customer_id == current_user.id)
+    # admin sees all
+
+    rows = bq.order_by(Bill.issued_at.desc()).all()
+
+    # ✅ Hide commission / net_to_provider from customers
+    is_customer = current_user.role not in ("admin", "provider")
+
+    bills_out = []
+    for b in rows:
+        item = {
+            "bill_id": b.id,
+            "bill_number": b.bill_number,
+            "booking_id": b.booking_id,
+            "service": b.service,
+            "paid_amount": float(b.paid_amount),
+            "provider_name": b.provider_name,
+            "customer_name": b.customer_name,
+            "booking_date": b.booking_date,
+            "gateway": b.gateway,
+            "utr_number": b.utr_number,
+            "issued_at": b.issued_at.isoformat() if b.issued_at else None,
+            "email_status": b.email_status,
+        }
+        if not is_customer:
+            item["commission"] = float(b.commission or 0)
+            item["net_to_provider"] = float(b.net_to_provider or 0)
+        bills_out.append(item)
+
+    return {
+        "success": True,
+        "backfilled": backfilled,
+        "count": len(bills_out),
+        "bills": bills_out,
+    }
+
+
+@router.get("/payments/bills/booking/{booking_id}")
+async def get_bill_for_booking(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bill = (
+        db.query(Bill)
+        .filter(Bill.booking_id == booking_id)
+        .order_by(Bill.version.desc(), Bill.issued_at.desc())
+        .first()
+    )
+    if not bill:
+        raise HTTPException(404, "Bill not found for this booking")
+
+    is_party = (
+        bill.customer_id == current_user.id
+        or bill.provider_id == current_user.id
+        or current_user.role == "admin"
+    )
+    if not is_party:
+        raise HTTPException(403, "Not allowed")
+
+    # ✅ Hide commission / net_to_provider from the customer view
+    is_customer_view = (
+        current_user.role == "customer"
+        and bill.customer_id == current_user.id
+        and bill.provider_id != current_user.id
+    )
+
+    payload = {
+        "bill_id": bill.id,
+        "bill_number": bill.bill_number,
+        "booking_id": bill.booking_id,
+        "paid_amount": float(bill.paid_amount),
+        "quoted_amount": float(bill.quoted_amount),
+        "service": bill.service,
+        "customer_name": bill.customer_name,
+        "provider_name": bill.provider_name,
+        "booking_date": bill.booking_date,
+        "gateway": bill.gateway,
+        "utr_number": bill.utr_number,
+        "issued_at": bill.issued_at.isoformat() if bill.issued_at else None,
+        "email_status": bill.email_status,
+    }
+    if not is_customer_view:
+        payload["commission"] = float(bill.commission or 0)
+        payload["net_to_provider"] = float(bill.net_to_provider or 0)
+
+    return {"success": True, "bill": payload}
+
+
+@router.get("/payments/bills/{bill_id}/download")
+async def download_bill(
+    bill_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(404, "Bill not found")
+
+    is_party = (
+        bill.customer_id == current_user.id
+        or bill.provider_id == current_user.id
+        or current_user.role == "admin"
+    )
+    if not is_party:
+        raise HTTPException(403, "Not allowed")
+
+    # ✅ Role-aware PDF: provider/admin gets payout statement, customer gets receipt
+    if current_user.role == "admin" or bill.provider_id == current_user.id:
+        pdf_bytes = generate_provider_bill_pdf(bill)
+        filename_prefix = "ApnaMate-Payout"
+    else:
+        pdf_bytes = generate_customer_bill_pdf(bill)
+        filename_prefix = "ApnaMate-Bill"
+
+    filename = f"{filename_prefix}-{bill.bill_number}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/payments/bills/{bill_id}/resend")
+async def admin_resend_bill(
+    bill_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Admin: re-send the bill email (e.g. if delivery failed)."""
+    if current_user.role != "admin":
+        raise HTTPException(403, "Admin only")
+
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(404, "Bill not found")
+
+    # ✅ Two different PDFs — customer receipt vs provider statement
+    customer_pdf = generate_customer_bill_pdf(bill)
+    provider_pdf = generate_provider_bill_pdf(bill)
+
+    customer = db.query(User).filter(User.id == bill.customer_id).first()
+    provider = (
+        db.query(User).filter(User.id == bill.provider_id).first()
+        if bill.provider_id else None
+    )
+
+    sent_to = []
+
+    if customer and customer.email:
+        html_c = render_template(
+            "bill_customer.html",
+            subject=f"Payment Confirmed — Booking #{bill.booking_id}",
+            bill=bill,
+            fallback_text=f"Payment of ₹{bill.paid_amount} confirmed. Bill: {bill.bill_number}",
+        )
+        r = send_email(
+            to_email=customer.email,
+            subject=f"✅ ApnaMate Payment Confirmed (Resend) — Bill {bill.bill_number}",
+            html_body=html_c,
+            text_body=f"Your bill {bill.bill_number} for booking #{bill.booking_id}.",
+            attachments=[{
+                "data": customer_pdf,
+                "maintype": "application",
+                "subtype": "pdf",
+                "filename": f"ApnaMate-Bill-{bill.bill_number}.pdf",
+            }],
+            db=db,
+            template="bill_customer_resend",
+            bill_id=bill.id,
+            booking_id=bill.booking_id,
+        )
+        if r["success"]:
+            bill.emailed_to_customer_at = datetime.now()
+            sent_to.append("customer")
+
+    if provider and provider.email:
+        html_p = render_template(
+            "bill_provider.html",
+            subject=f"Payment Received — Booking #{bill.booking_id}",
+            bill=bill,
+            fallback_text=f"Payment received for booking #{bill.booking_id}.",
+        )
+        r = send_email(
+            to_email=provider.email,
+            subject=f"💵 ApnaMate Payment Received (Resend) — Booking #{bill.booking_id}",
+            html_body=html_p,
+            text_body=f"Payment received for booking #{bill.booking_id}.",
+            attachments=[{
+                "data": provider_pdf,
+                "maintype": "application",
+                "subtype": "pdf",
+                "filename": f"ApnaMate-Receipt-{bill.bill_number}.pdf",
+            }],
+            db=db,
+            template="bill_provider_resend",
+            bill_id=bill.id,
+            booking_id=bill.booking_id,
+        )
+        if r["success"]:
+            bill.emailed_to_provider_at = datetime.now()
+            sent_to.append("provider")
+
+    if sent_to:
+        bill.email_status = "sent"
+    db.commit()
+
+    return {"success": True, "sent_to": sent_to}

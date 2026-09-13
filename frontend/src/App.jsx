@@ -3,8 +3,11 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { lazy, Suspense, useEffect, useState } from "react";
 
-// Import Pages
+// ==============================
+// PAGE IMPORTS (lazy-loaded)
+// ==============================
 const Home = lazy(() => import("./pages/Home"));
+const HomeFeed = lazy(() => import("./pages/HomeFeed"));
 const Login = lazy(() => import("./components/auth/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const ForgotPassword = lazy(() => import("./components/auth/ForgotPassword"));
@@ -13,27 +16,44 @@ const Services = lazy(() => import("./pages/Services"));
 const Providers = lazy(() => import("./pages/Providers"));
 const ProviderDashboard = lazy(() => import("./pages/ProviderDashboard"));
 const ProviderProfile = lazy(() => import("./pages/ProviderProfile"));
-const CustomerProfile = lazy(() => import("./pages/CustomerProfile"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Booking = lazy(() => import("./pages/Booking"));
 const MyBookings = lazy(() => import("./pages/MyBookings"));
 const MyReviews = lazy(() => import("./pages/MyReviews"));
 const MyPayments = lazy(() => import("./pages/MyPayments"));
+const MyBills = lazy(() => import("./pages/MyBills"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 
-// Admin Pages
+// ✅ Unified profile page (role-aware)
+const Profile = lazy(() => import("./pages/Profile"));
+
+// ✅ NEW: Edit Profile page
+const EditProfile = lazy(() => import("./pages/EditProfile"));
+
+// ✅ Phone OTP auth pages
+const LoginPhone = lazy(() => import("./pages/LoginPhone"));
+const VerifyOtp = lazy(() => import("./pages/VerifyOtp"));
+
+// ==============================
+// ADMIN PAGES
+// ==============================
 const AdminUsers = lazy(() => import("./pages/AdminUsers"));
 const AdminBookings = lazy(() => import("./pages/AdminBookings"));
 const AdminReviews = lazy(() => import("./pages/AdminReviews"));
-// ✅ NEW: Admin Payments (quote-flow verification + payouts)
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 
-// ✅ Analytics Component
+// ==============================
+// ANALYTICS
+// ==============================
 const ReviewAnalytics = lazy(() => import("./components/ReviewAnalytics"));
 
+// ==============================
+// SHARED COMPONENTS
+// ==============================
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import Navbar from "./components/common/Navbar";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 
 import "./App.css";
 
@@ -45,16 +65,13 @@ function App() {
   // ==============================
   // LOAD USER FROM LOCALSTORAGE
   // ==============================
-
   const loadUser = () => {
     const userData = localStorage.getItem("user");
-    console.log("🔍 Loading user from localStorage:", userData);
 
     if (userData && userData !== "undefined") {
       try {
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
-        console.log("✅ User loaded:", parsedUser);
         return parsedUser;
       } catch (e) {
         console.error("❌ Error parsing user data:", e);
@@ -62,7 +79,6 @@ function App() {
         setUser(null);
       }
     } else {
-      console.log("❌ No user found in localStorage");
       setUser(null);
     }
     return null;
@@ -71,7 +87,6 @@ function App() {
   // ==============================
   // INITIAL LOAD
   // ==============================
-
   useEffect(() => {
     loadUser();
     setLoading(false);
@@ -80,57 +95,63 @@ function App() {
   // ==============================
   // LISTEN FOR STORAGE CHANGES
   // ==============================
-
   useEffect(() => {
-    const handleStorageChange = () => {
-      console.log("🔄 Storage changed, reloading user...");
-      loadUser();
-    };
+    const handleStorageChange = () => loadUser();
 
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   // ==============================
-  // CHECK AUTH PAGES
+  // AUTH PAGE DETECTION
   // ==============================
+  const isAuthPage = [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/login-phone",
+    "/verify-otp",
+  ].includes(location.pathname);
 
-  const isAuthPage = ["/login", "/register", "/forgot-password", "/reset-password"].includes(location.pathname);
-
-  console.log("📍 Current path:", location.pathname);
-  console.log("👤 User state:", user);
+  // ==============================
+  // HOME REDIRECT HELPER
+  // ==============================
+  const homeForRole = (role) => {
+    if (role === "admin") return "/admin-dashboard";
+    if (role === "provider") return "/provider-dashboard";
+    return "/dashboard";
+  };
 
   // ==============================
   // LOADING SCREEN
   // ==============================
-
   if (loading) {
     return (
-      <div className="loading-screen" style={{
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "100vh",
-        backgroundColor: "#f5f7fb"
-      }}>
-        <div className="loading-spinner" style={{
-          width: "48px",
-          height: "48px",
-          border: "4px solid #e5e7eb",
-          borderTopColor: "#2563eb",
-          borderRadius: "50%",
-          animation: "spin 1s linear infinite"
-        }}></div>
+      <div
+        className="loading-screen"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "100vh",
+          backgroundColor: "#f5f7fb",
+        }}
+      >
+        <div
+          className="loading-spinner"
+          style={{
+            width: "48px",
+            height: "48px",
+            border: "4px solid #e5e7eb",
+            borderTopColor: "#2563eb",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+          }}
+        />
         <p style={{ marginTop: "16px", color: "#6b7280" }}>Loading...</p>
-        <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -138,308 +159,323 @@ function App() {
   // ==============================
   // RENDER
   // ==============================
-
   return (
     <div className="app">
-      {!isAuthPage && <Navbar user={user} />}
+      {!isAuthPage && <Navbar user={user} setUser={setUser} />}
 
       <main className="main-content">
-        <Suspense fallback={<div className="loading-screen">Loading...</div>}>
-          <Routes>
-          {/* ============================== */}
-          {/* PUBLIC ROUTES */}
-          {/* ============================== */}
+        <ErrorBoundary>
+          <Suspense fallback={<div className="loading-screen">Loading...</div>}>
+            <Routes>
+              {/* PUBLIC — Home marketing page if logged out, HomeFeed if logged in */}
+              <Route
+                path="/"
+                element={
+                  user ? (
+                    <ProtectedRoute user={user}>
+                      <HomeFeed user={user} />
+                    </ProtectedRoute>
+                  ) : (
+                    <Home />
+                  )
+                }
+              />
 
-          <Route
-            path="/"
-            element={
-              user ? (
-                <Navigate
-                  to={
-                    user.role === "admin"
-                      ? "/admin-dashboard"
-                      : user.role === "provider"
-                        ? "/provider-dashboard"
-                        : "/dashboard"
-                  }
-                  replace
-                />
-              ) : (
-                <Home />
-              )
-            }
-          />
+              {/* AUTH */}
+              <Route
+                path="/login"
+                element={
+                  user ? (
+                    <Navigate to={homeForRole(user.role)} replace />
+                  ) : (
+                    <Login setUser={setUser} />
+                  )
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  user ? (
+                    <Navigate to={homeForRole(user.role)} replace />
+                  ) : (
+                    <Register />
+                  )
+                }
+              />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* ============================== */}
-          {/* AUTH ROUTES */}
-          {/* ============================== */}
+              {/* ✅ Phone OTP login */}
+              <Route
+                path="/login-phone"
+                element={
+                  user ? (
+                    <Navigate to={homeForRole(user.role)} replace />
+                  ) : (
+                    <LoginPhone />
+                  )
+                }
+              />
+              <Route
+                path="/verify-otp"
+                element={
+                  user ? (
+                    <Navigate to={homeForRole(user.role)} replace />
+                  ) : (
+                    <VerifyOtp setUser={setUser} />
+                  )
+                }
+              />
 
-          <Route
-            path="/login"
-            element={
-              user ? (
-                <Navigate
-                  to={
-                    user.role === "admin"
-                      ? "/admin-dashboard"
-                      : user.role === "provider"
-                        ? "/provider-dashboard"
-                        : "/dashboard"
-                  }
-                  replace
-                />
-              ) : (
-                <Login setUser={setUser} />
-              )
-            }
-          />
+              {/* PROTECTED — ALL USERS */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/register"
-            element={
-              user ? (
-                <Navigate
-                  to={user.role === "provider" ? "/provider-dashboard" : "/dashboard"}
-                  replace
-                />
-              ) : (
-                <Register />
-              )
-            }
-          />
+              {/* ✅ Unified profile page — any logged-in user */}
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+              {/* ✅ NEW: Edit profile with avatar upload + Aadhaar verify */}
+              <Route
+                path="/profile/edit"
+                element={
+                  <ProtectedRoute user={user}>
+                    <EditProfile />
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* ============================== */}
-          {/* PROTECTED ROUTES - ALL USERS */}
-          {/* ============================== */}
+              {/* ✅ Backwards compat: old customer-profile redirects */}
+              <Route
+                path="/customer-profile"
+                element={<Navigate to="/profile" replace />}
+              />
 
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute user={user}>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/services"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Services />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/customer-profile"
-            element={
-              <ProtectedRoute user={user}>
-                <CustomerProfile />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/providers"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Providers />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/services"
-            element={
-              <ProtectedRoute user={user}>
-                <Services />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/booking"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Booking />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/providers"
-            element={
-              <ProtectedRoute user={user}>
-                <Providers />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/my-bookings"
+                element={
+                  <ProtectedRoute user={user}>
+                    <MyBookings />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/booking"
-            element={
-              <ProtectedRoute user={user}>
-                <Booking />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/my-reviews"
+                element={
+                  <ProtectedRoute user={user}>
+                    <MyReviews />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/my-bookings"
-            element={
-              <ProtectedRoute user={user}>
-                <MyBookings />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/my-payments"
+                element={
+                  <ProtectedRoute user={user}>
+                    <MyPayments />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/my-reviews"
-            element={
-              <ProtectedRoute user={user}>
-                <MyReviews />
-              </ProtectedRoute>
-            }
-          />
+              {/* ✅ My Bills — all logged-in users */}
+              <Route
+                path="/my-bills"
+                element={
+                  <ProtectedRoute user={user}>
+                    <MyBills />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/my-payments"
-            element={
-              <ProtectedRoute user={user}>
-                <MyPayments />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/notifications"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Notifications />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/notifications"
-            element={
-              <ProtectedRoute user={user}>
-                <Notifications />
-              </ProtectedRoute>
-            }
-          />
+              {/* PROVIDER (and admin override) */}
+              <Route
+                path="/provider-dashboard"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                    <ProviderDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* ============================== */}
-          {/* PROTECTED ROUTES - PROVIDER ONLY */}
-          {/* ============================== */}
+              {/* ✅ Provider-profile redirects to the unified /profile */}
+              <Route
+                path="/provider-profile"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                    <Navigate to="/profile" replace />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/provider-dashboard"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                <ProviderDashboard />
-              </ProtectedRoute>
-            }
-          />
+              {/* Public provider detail page */}
+              <Route
+                path="/provider/:id"
+                element={
+                  <ProtectedRoute user={user}>
+                    <ProviderProfile />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/provider-profile"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                <ProviderProfile />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/provider-analytics"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                    <ReviewAnalytics providerId={user?.id} />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/provider/:id"
-            element={
-              <ProtectedRoute user={user}>
-                <ProviderProfile />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/provider-analytics/:providerId"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                    <ReviewAnalytics />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/provider-analytics"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                <ReviewAnalytics providerId={user?.id} />
-              </ProtectedRoute>
-            }
-          />
+              {/* ADMIN */}
+              <Route
+                path="/admin-dashboard"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/provider-analytics/:providerId"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                <ReviewAnalytics />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-          {/* ============================== */}
-          {/* PROTECTED ROUTES - ADMIN ONLY */}
-          {/* ============================== */}
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                    <AdminUsers />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/admin-dashboard"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/admin/bookings"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                    <AdminBookings />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/admin/reviews"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                    <AdminReviews />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/admin/users"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                <AdminUsers />
-              </ProtectedRoute>
-            }
-          />
+              <Route
+                path="/admin/payments"
+                element={
+                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                    <AdminPayments />
+                  </ProtectedRoute>
+                }
+              />
 
-          <Route
-            path="/admin/bookings"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                <AdminBookings />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/admin/reviews"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                <AdminReviews />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* ✅ NEW: Admin Payments — verify customer payments & send provider payouts */}
-          <Route
-            path="/admin/payments"
-            element={
-              <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                <AdminPayments />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* ============================== */}
-          {/* 404 NOT FOUND */}
-          {/* ============================== */}
-
-          <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
+              {/* 404 */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );
 }
 
 // ==============================
-// 404 NOT FOUND COMPONENT
+// 404 NOT FOUND
 // ==============================
-
 function NotFound() {
   const navigate = useNavigate();
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: "#f5f7fb",
-      padding: "20px",
-      textAlign: "center"
-    }}>
-      <div style={{
-        fontSize: "80px",
-        fontWeight: "bold",
-        color: "#2563eb",
-        marginBottom: "16px"
-      }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#f5f7fb",
+        padding: "20px",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "80px",
+          fontWeight: "bold",
+          color: "#2563eb",
+          marginBottom: "16px",
+        }}
+      >
         404
       </div>
       <h1 style={{ margin: "0 0 8px 0", color: "#1e293b" }}>
@@ -459,10 +495,10 @@ function NotFound() {
           cursor: "pointer",
           fontWeight: "bold",
           fontSize: "16px",
-          transition: "background 0.2s"
+          transition: "background 0.2s",
         }}
-        onMouseEnter={(e) => e.target.style.background = "#1d4ed8"}
-        onMouseLeave={(e) => e.target.style.background = "#2563eb"}
+        onMouseEnter={(e) => (e.target.style.background = "#1d4ed8")}
+        onMouseLeave={(e) => (e.target.style.background = "#2563eb")}
       >
         🏠 Go Home
       </button>

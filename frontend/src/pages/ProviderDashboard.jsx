@@ -25,8 +25,15 @@ function ProviderDashboard() {
   const [myUpi, setMyUpi] = useState("");
   const [savingUpi, setSavingUpi] = useState(false);
 
+  // ✅ NEW: reviews state
+  const [reviews, setReviews] = useState([]);
+  const [avgRating, setAvgRating] = useState(0);
+
+  // track which booking's receipt is downloading
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+
   // =========================================================
-  // MESSAGE HELPER — persistent errors (12s), success fades (3s)
+  // MESSAGE HELPER
   // =========================================================
   const showMessage = (text, type = "info") => {
     setMessage(text);
@@ -37,9 +44,7 @@ function ProviderDashboard() {
 
   const authHeader = () => {
     const token = localStorage.getItem("accessToken");
-    if (!token) {
-      console.warn("⚠️ No accessToken in localStorage");
-    }
+    if (!token) console.warn("⚠️ No accessToken in localStorage");
     return { Authorization: `Bearer ${token || ""}` };
   };
 
@@ -52,7 +57,6 @@ function ProviderDashboard() {
       navigate("/login");
       return;
     }
-
     try {
       const parsedUser = JSON.parse(storedUser);
       if (parsedUser.role !== "provider") {
@@ -64,6 +68,7 @@ function ProviderDashboard() {
       fetchProfile(parsedUser.id);
       fetchNotificationCount(parsedUser.id);
       fetchPayouts();
+      fetchReviews(parsedUser.id); // ✅ NEW
     } catch (error) {
       console.error("Error parsing user:", error);
       localStorage.removeItem("user");
@@ -92,6 +97,39 @@ function ProviderDashboard() {
       }
     } catch (error) {
       console.error("Error fetching notification count:", error);
+    }
+  };
+
+  // =========================================================
+  // ✅ NEW: REVIEWS
+  // =========================================================
+  const fetchReviews = async (providerId) => {
+    if (!providerId) return;
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/bookings/reviews/provider/${providerId}`,
+        { headers: authHeader() }
+      );
+      if (!response.ok) {
+        console.warn("Reviews fetch failed:", response.status);
+        return;
+      }
+      const data = await response.json();
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data.reviews)
+          ? data.reviews
+          : [];
+      setReviews(list);
+
+      if (list.length > 0) {
+        const sum = list.reduce((acc, r) => acc + (r.rating || 0), 0);
+        setAvgRating((sum / list.length).toFixed(1));
+      } else {
+        setAvgRating(0);
+      }
+    } catch (error) {
+      console.error("Reviews fetch error:", error);
     }
   };
 
@@ -136,8 +174,6 @@ function ProviderDashboard() {
         return;
       }
       const data = await response.json();
-      console.log("📥 Profile response:", data);
-
       if (data.availability) setAvailability(data.availability);
 
       const u = data.user || {};
@@ -158,19 +194,85 @@ function ProviderDashboard() {
         `${API_BASE_URL}/bookings/payments/provider/payouts`,
         { headers: authHeader() }
       );
-
       if (!response.ok) {
         const body = await response.text();
         console.warn(`⚠️ Payouts HTTP ${response.status}:`, body);
-        // Don't spam the user for payout load errors — just log
         return;
       }
-
       const data = await response.json();
-      console.log("📥 Payouts:", data);
       setPayoutInfo(data);
     } catch (error) {
       console.error("Payouts fetch error:", error);
+    }
+  };
+
+  // =========================================================
+  // ✅ DOWNLOAD RECEIPT (PDF) — with auto-backfill retry
+  // =========================================================
+  const downloadReceipt = async (bookingId) => {
+    setDownloadingReceiptId(bookingId);
+    try {
+      const token = localStorage.getItem("accessToken");
+
+      let infoRes = await fetch(
+        `${API_BASE_URL}/bookings/payments/bills/booking/${bookingId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // If missing, trigger auto-backfill and retry once
+      if (infoRes.status === 404) {
+        try {
+          await fetch(`${API_BASE_URL}/bookings/payments/bills/all`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch (bfErr) {
+          console.warn("Auto-backfill attempt failed:", bfErr);
+        }
+        infoRes = await fetch(
+          `${API_BASE_URL}/bookings/payments/bills/booking/${bookingId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
+      if (!infoRes.ok) {
+        if (infoRes.status === 404) {
+          showMessage(
+            "Receipt is not available yet. Visit '🧾 My Bills' to generate it.",
+            "info"
+          );
+        } else {
+          showMessage("Unable to fetch receipt.", "error");
+        }
+        return;
+      }
+
+      const infoData = await infoRes.json();
+      const billId = infoData.bill?.bill_id;
+      const billNumber = infoData.bill?.bill_number || `booking-${bookingId}`;
+      if (!billId) throw new Error("Bill ID missing");
+
+      const pdfRes = await fetch(
+        `${API_BASE_URL}/bookings/payments/bills/${billId}/download`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!pdfRes.ok) throw new Error("Download failed");
+
+      const blob = await pdfRes.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ApnaMate-Receipt-${billNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      showMessage("📄 Receipt downloaded!", "success");
+    } catch (err) {
+      console.error("Receipt download error:", err);
+      showMessage("Unable to download receipt: " + err.message, "error");
+    } finally {
+      setDownloadingReceiptId(null);
     }
   };
 
@@ -183,43 +285,31 @@ function ProviderDashboard() {
       showMessage("❌ Enter a valid UPI ID (e.g. yourname@oksbi)", "error");
       return;
     }
-
     setSavingUpi(true);
     try {
       const response = await fetch(
         `${API_BASE_URL}/bookings/payments/provider/save-upi`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeader(),
-          },
+          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ upi_id: upi }),
         }
       );
-
       const rawText = await response.text();
-      console.log(`📥 save-upi HTTP ${response.status}:`, rawText);
-
       if (!response.ok) {
         showMessage(`❌ Save failed (${response.status}): ${rawText.slice(0, 200)}`, "error");
         return;
       }
-
       let data = {};
       try { data = JSON.parse(rawText); } catch {}
-
       showMessage(`✅ UPI saved: ${data.upi_id || upi}`, "success");
 
-      // Update local user object
       const stored = JSON.parse(localStorage.getItem("user") || "{}");
       stored.upi_id = data.upi_id || upi;
       localStorage.setItem("user", JSON.stringify(stored));
       setUser((prev) => ({ ...prev, upi_id: data.upi_id || upi }));
 
-      // Reload profile to verify persistence
       if (user?.id) await fetchProfile(user.id);
-
     } catch (error) {
       console.error("Save UPI error:", error);
       showMessage(`❌ Network error: ${error.message}`, "error");
@@ -234,7 +324,6 @@ function ProviderDashboard() {
   const savePriceRange = async () => {
     const min = parseFloat(minPrice);
     const max = parseFloat(maxPrice);
-
     if (isNaN(min) || isNaN(max)) {
       showMessage("❌ Please enter both minimum and maximum prices", "error");
       return;
@@ -247,32 +336,21 @@ function ProviderDashboard() {
       showMessage("❌ Minimum price cannot exceed maximum price", "error");
       return;
     }
-
     setSavingRange(true);
     try {
       const response = await fetch(
         `${API_BASE_URL}/bookings/provider/price-range`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeader(),
-          },
+          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({ min_price: min, max_price: max }),
         }
       );
-
       const rawText = await response.text();
-      console.log(`📥 price-range HTTP ${response.status}:`, rawText);
-
       if (!response.ok) {
         showMessage(`❌ Save failed (${response.status}): ${rawText.slice(0, 200)}`, "error");
         return;
       }
-
-      let data = {};
-      try { data = JSON.parse(rawText); } catch {}
-
       showMessage(`✅ Price range updated: ₹${min} – ₹${max}`, "success");
 
       const stored = JSON.parse(localStorage.getItem("user") || "{}");
@@ -281,7 +359,6 @@ function ProviderDashboard() {
       localStorage.setItem("user", JSON.stringify(stored));
 
       if (user?.id) await fetchProfile(user.id);
-
     } catch (error) {
       console.error("Price range error:", error);
       showMessage(`❌ Network error: ${error.message}`, "error");
@@ -330,30 +407,23 @@ function ProviderDashboard() {
 
     try {
       updateQuoteForm(bookingId, { sending: true });
-
       const response = await fetch(
         `${API_BASE_URL}/bookings/${bookingId}/quote`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeader(),
-          },
+          headers: { "Content-Type": "application/json", ...authHeader() },
           body: JSON.stringify({
             quoted_amount: amount,
             quote_note: form.note?.trim() || null,
           }),
         }
       );
-
       const data = await response.json();
-
       if (!response.ok) {
         showMessage(`❌ ${data.detail || "Failed to send quote"}`, "error");
         updateQuoteForm(bookingId, { sending: false });
         return;
       }
-
       showMessage(`✅ Quote of ₹${amount} sent to customer`, "success");
       updateQuoteForm(bookingId, { open: false, sending: false, amount: "", note: "" });
       fetchBookings(user.id);
@@ -372,18 +442,15 @@ function ProviderDashboard() {
     if (!user) return;
     try {
       showMessage("Updating availability...", "info");
-
       const response = await fetch(
         `${API_BASE_URL}/bookings/availability/${user.id}?availability=${encodeURIComponent(newAvailability)}`,
         { method: "PUT", headers: authHeader() }
       );
       const data = await response.json();
-
       if (!response.ok) {
         showMessage(data.detail || "Failed to update availability", "error");
         return;
       }
-
       setAvailability(data.availability);
       showMessage(`✅ Availability changed to ${data.availability}`, "success");
     } catch (error) {
@@ -393,35 +460,36 @@ function ProviderDashboard() {
   };
 
   // =========================================================
-  // CANCEL BOOKING
+  // UPDATE BOOKING STATUS
   // =========================================================
   const updateBookingStatus = async (bookingId, action) => {
+    let newStatus;
+    if (action === "complete") newStatus = "completed";
+    else if (action === "cancel") newStatus = "cancelled";
+    else newStatus = action;
+
+    if (action === "cancel" && !window.confirm("Cancel this booking?")) return;
+    if (action === "complete" && !window.confirm("Mark this job as completed?")) return;
+
     try {
       showMessage("Updating booking...", "info");
-
       const response = await fetch(
         `${API_BASE_URL}/bookings/${bookingId}`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeader(),
-          },
-          body: JSON.stringify({
-            status: action === "complete" ? "completed" : "cancelled",
-          }),
+          headers: { "Content-Type": "application/json", ...authHeader() },
+          body: JSON.stringify({ status: newStatus }),
         }
       );
       const data = await response.json();
-
       if (!response.ok) {
         showMessage(data.detail || "Unable to update booking", "error");
         return;
       }
-
       showMessage("✅ Booking updated", "success");
       fetchBookings(user.id);
       fetchNotificationCount(user.id);
+      fetchPayouts();
     } catch (error) {
       console.error("Booking status error:", error);
       showMessage("Unable to update booking", "error");
@@ -445,28 +513,40 @@ function ProviderDashboard() {
     fetchProfile(user.id);
     fetchNotificationCount(user.id);
     fetchPayouts();
+    fetchReviews(user.id); // ✅ NEW
     showMessage("🔄 Data refreshed!", "success");
   };
 
   // =========================================================
-  // STATS / HELPERS (unchanged)
+  // STATS / HELPERS
   // =========================================================
-  const pendingBookings = bookings.filter(
-    (b) => b.status === "pending_quote" || b.status === "Pending"
-  ).length;
-  const quotedBookings = bookings.filter((b) => b.status === "quoted").length;
-  const acceptedBookings = bookings.filter(
-    (b) => b.status === "accepted" || b.status === "Accepted" || b.status === "Confirmed"
-  ).length;
-  const completedBookings = bookings.filter(
-    (b) => b.status === "completed" || b.status === "Completed" || b.status === "paid"
-  ).length;
-  const rejectedBookings = bookings.filter(
-    (b) => b.status === "rejected" || b.status === "Rejected"
-  ).length;
-  const cancelledBookings = bookings.filter(
-    (b) => b.status === "cancelled" || b.status === "Cancelled"
-  ).length;
+  const normalize = (s) => (s || "pending_quote").toLowerCase().replace(/\s+/g, "_");
+
+  const pendingBookings = bookings.filter((b) => {
+    const n = normalize(b.status);
+    return n === "pending_quote" || n === "pending";
+  }).length;
+
+  const quotedBookings = bookings.filter((b) => normalize(b.status) === "quoted").length;
+
+  const acceptedBookings = bookings.filter((b) => {
+    const n = normalize(b.status);
+    return n === "accepted" || n === "confirmed";
+  }).length;
+
+  const paymentPendingBookings = bookings.filter((b) => {
+    const n = normalize(b.status);
+    return n === "payment_pending" || n === "pending_verification";
+  }).length;
+
+  const completedBookings = bookings.filter((b) => {
+    const n = normalize(b.status);
+    return n === "completed" || n === "paid";
+  }).length;
+
+  const rejectedBookings = bookings.filter((b) => normalize(b.status) === "rejected").length;
+
+  const cancelledBookings = bookings.filter((b) => normalize(b.status) === "cancelled").length;
 
   const getAvailabilityColor = () => {
     if (availability === "Available") return "#16a34a";
@@ -480,36 +560,47 @@ function ProviderDashboard() {
   };
 
   const getStatusBadge = (status) => {
-    const s = status || "pending_quote";
+    const s = normalize(status);
     switch (s) {
       case "pending_quote":
-      case "Pending":
+      case "pending":
         return { bg: "#fef3c7", color: "#92400e", label: "⏳ Pending Quote" };
       case "quoted":
         return { bg: "#e0e7ff", color: "#3730a3", label: "💰 Quoted" };
       case "accepted":
-      case "Accepted":
-      case "Confirmed":
+      case "confirmed":
         return { bg: "#dbeafe", color: "#1e40af", label: "✅ Accepted" };
+      case "payment_pending":
+      case "pending_verification":
+        return { bg: "#fef9c3", color: "#854d0e", label: "⌛ Payment Pending" };
       case "paid":
         return { bg: "#dcfce7", color: "#166534", label: "💵 Paid" };
       case "completed":
-      case "Completed":
         return { bg: "#dcfce7", color: "#166534", label: "🎉 Completed" };
       case "rejected":
-      case "Rejected":
         return { bg: "#ffedd5", color: "#c2410c", label: "❌ Rejected" };
       case "cancelled":
-      case "Cancelled":
         return { bg: "#fee2e2", color: "#b91c1c", label: "🚫 Cancelled" };
       default:
         return { bg: "#f1f5f9", color: "#475569", label: status };
     }
   };
 
-  const isPendingQuote = (s) => s === "pending_quote" || s === "Pending";
-  const isAccepted = (s) => s === "accepted" || s === "Accepted" || s === "Confirmed";
-  const isCompleted = (s) => s === "completed" || s === "Completed" || s === "paid";
+  const isPendingQuote = (s) => {
+    const n = normalize(s);
+    return n === "pending_quote" || n === "pending";
+  };
+  const isAccepted = (s) => {
+    const n = normalize(s);
+    return n === "accepted" || n === "confirmed";
+  };
+  const isPaymentPending = (s) => {
+    const n = normalize(s);
+    return n === "payment_pending" || n === "pending_verification";
+  };
+  const isPaid = (s) => normalize(s) === "paid";
+  const isCompleted = (s) => normalize(s) === "completed";
+  const isRejected = (s) => normalize(s) === "rejected";
 
   // =========================================================
   // LOADING
@@ -551,18 +642,16 @@ function ProviderDashboard() {
 
       {/* MESSAGE */}
       {message && (
-        <div
-          style={{
-            maxWidth: "1100px",
-            margin: "0 auto 20px",
-            padding: "15px 20px",
-            backgroundColor: messageType === "error" ? "#fee2e2" : "#dcfce7",
-            color: messageType === "error" ? "#991b1b" : "#166534",
-            borderRadius: "8px",
-            borderLeft: `4px solid ${messageType === "error" ? "#dc2626" : "#16a34a"}`,
-            fontWeight: "bold",
-          }}
-        >
+        <div style={{
+          maxWidth: "1100px",
+          margin: "0 auto 20px",
+          padding: "15px 20px",
+          backgroundColor: messageType === "error" ? "#fee2e2" : "#dcfce7",
+          color: messageType === "error" ? "#991b1b" : "#166534",
+          borderRadius: "8px",
+          borderLeft: `4px solid ${messageType === "error" ? "#dc2626" : "#16a34a"}`,
+          fontWeight: "bold",
+        }}>
           {message}
         </div>
       )}
@@ -595,6 +684,59 @@ function ProviderDashboard() {
               ))}
             </div>
           </details>
+        )}
+      </div>
+
+      {/* ✅ NEW: REVIEWS */}
+      <div style={{ maxWidth: "1100px", margin: "0 auto 25px", backgroundColor: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 3px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <h2 style={{ marginTop: 0, color: "#1e293b", marginBottom: 0 }}>⭐ Customer Reviews</h2>
+          {reviews.length > 0 && (
+            <span style={{ backgroundColor: "#fef3c7", color: "#92400e", padding: "6px 14px", borderRadius: "20px", fontWeight: "bold" }}>
+              ⭐ {avgRating} · {reviews.length} review{reviews.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+
+        {reviews.length === 0 ? (
+          <p style={{ color: "#64748b", marginTop: 12 }}>
+            No reviews yet. Once customers complete bookings and rate you, they'll show up here.
+          </p>
+        ) : (
+          <div style={{ marginTop: 14 }}>
+            {reviews.map((r, idx) => (
+              <div
+                key={r.id || r.review_id || idx}
+                style={{
+                  padding: "14px 16px",
+                  backgroundColor: "#f8fafc",
+                  borderRadius: "10px",
+                  marginBottom: 10,
+                  borderLeft: "4px solid #f59e0b",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 18 }}>
+                    {"⭐".repeat(Math.max(1, Math.min(5, r.rating || 0)))}
+                  </span>
+                  <strong style={{ color: "#334155" }}>{r.rating}/5</strong>
+                  {r.customer_name && (
+                    <span style={{ color: "#64748b", fontSize: 13 }}>
+                      · by {r.customer_name}
+                    </span>
+                  )}
+                </div>
+                {r.comment && (
+                  <p style={{ margin: "6px 0 0", color: "#475569", fontStyle: "italic", fontSize: 14 }}>
+                    "{r.comment}"
+                  </p>
+                )}
+                <p style={{ margin: "6px 0 0", color: "#94a3b8", fontSize: 12 }}>
+                  {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
+                </p>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -664,10 +806,11 @@ function ProviderDashboard() {
       </div>
 
       {/* STATS */}
-      <div style={{ maxWidth: "1100px", margin: "0 auto 25px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "15px" }}>
+      <div style={{ maxWidth: "1100px", margin: "0 auto 25px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px" }}>
         <div style={statCardStyle}><h3>⏳ Pending</h3><p style={{ color: "#d97706" }}>{pendingBookings}</p></div>
         <div style={statCardStyle}><h3>💰 Quoted</h3><p style={{ color: "#7c3aed" }}>{quotedBookings}</p></div>
         <div style={statCardStyle}><h3>✅ Accepted</h3><p style={{ color: "#2563eb" }}>{acceptedBookings}</p></div>
+        <div style={statCardStyle}><h3>⌛ Payment Pending</h3><p style={{ color: "#ca8a04" }}>{paymentPendingBookings}</p></div>
         <div style={statCardStyle}><h3>🎉 Completed</h3><p style={{ color: "#16a34a" }}>{completedBookings}</p></div>
         <div style={statCardStyle}><h3>❌ Rejected</h3><p style={{ color: "#ea580c" }}>{rejectedBookings}</p></div>
         <div style={statCardStyle}><h3>🚫 Cancelled</h3><p style={{ color: "#dc2626" }}>{cancelledBookings}</p></div>
@@ -696,6 +839,13 @@ function ProviderDashboard() {
             const badge = getStatusBadge(booking.status);
             const form = quoteForms[booking.id] || {};
             const canSendQuote = isPendingQuote(booking.status) && !booking.quoted_amount;
+            const canReQuote = isRejected(booking.status);
+            const payPending = isPaymentPending(booking.status);
+            const paidNow = isPaid(booking.status);
+            const completedNow = isCompleted(booking.status);
+            const isDownloading = downloadingReceiptId === booking.id;
+
+            const showReceiptButton = (paidNow || completedNow) && booking.paid_amount;
 
             return (
               <div key={booking.id} style={{ backgroundColor: "white", padding: "20px", marginBottom: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
@@ -722,9 +872,56 @@ function ProviderDashboard() {
                   </div>
                 )}
 
-                {canSendQuote && (
+                {payPending && (
+                  <div style={{ marginTop: "10px", padding: "12px 16px", backgroundColor: "#fef9c3", borderRadius: "8px", borderLeft: "4px solid #ca8a04" }}>
+                    <p style={{ margin: 0, fontWeight: "bold", color: "#854d0e" }}>⌛ Customer submitted payment — awaiting admin verification</p>
+                    <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#78350f" }}>You'll be notified once the admin confirms. Please don't mark as completed yet.</p>
+                  </div>
+                )}
+
+                {showReceiptButton && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      padding: "12px 16px",
+                      backgroundColor: "#dcfce7",
+                      borderRadius: "8px",
+                      borderLeft: "4px solid #16a34a",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <p style={{ margin: 0, fontWeight: "bold", color: "#166534" }}>
+                      💵 Customer Paid: ₹{booking.paid_amount}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isDownloading}
+                      onClick={() => downloadReceipt(booking.id)}
+                      style={{
+                        padding: "8px 16px",
+                        backgroundColor: isDownloading ? "#94a3b8" : "#2563eb",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: isDownloading ? "not-allowed" : "pointer",
+                        fontWeight: "bold",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {isDownloading ? "Downloading..." : "📄 Download Receipt"}
+                    </button>
+                  </div>
+                )}
+
+                {(canSendQuote || canReQuote) && (
                   <div style={{ marginTop: "15px", padding: "15px", backgroundColor: "#f0f9ff", borderRadius: "8px", border: "1px solid #bae6fd" }}>
-                    <p style={{ margin: "0 0 10px", fontWeight: "bold", color: "#075985" }}>💬 Send a Quote</p>
+                    <p style={{ margin: "0 0 10px", fontWeight: "bold", color: "#075985" }}>
+                      {canReQuote ? "🔄 Send a New Quote" : "💬 Send a Quote"}
+                    </p>
                     <input type="number" min="1" placeholder="Amount (₹)" value={form.amount || ""} onChange={(e) => updateQuoteForm(booking.id, { amount: e.target.value, open: true })} style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "15px", marginBottom: "8px", boxSizing: "border-box" }} />
                     <textarea placeholder="Note (optional)" value={form.note || ""} onChange={(e) => updateQuoteForm(booking.id, { note: e.target.value, open: true })} rows={2} style={{ width: "100%", padding: "10px 12px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "14px", resize: "vertical", marginBottom: "10px", boxSizing: "border-box" }} />
                     <button onClick={() => sendQuote(booking.id)} disabled={form.sending} style={{ padding: "10px 20px", backgroundColor: form.sending ? "#94a3b8" : "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: form.sending ? "not-allowed" : "pointer", fontWeight: "bold" }}>
@@ -737,7 +934,14 @@ function ProviderDashboard() {
                   {(isPendingQuote(booking.status) || isAccepted(booking.status)) && (
                     <button onClick={() => updateBookingStatus(booking.id, "cancel")} style={{ padding: "10px 18px", backgroundColor: "#6b7280", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>🚫 Cancel Booking</button>
                   )}
-                  {isCompleted(booking.status) && (
+
+                  {(paidNow || isAccepted(booking.status)) && !payPending && (
+                    <button onClick={() => updateBookingStatus(booking.id, "complete")} style={{ padding: "10px 18px", backgroundColor: "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
+                      {paidNow ? "🎉 Mark as Completed" : "✅ Mark as Completed"}
+                    </button>
+                  )}
+
+                  {completedNow && (
                     <span style={{ color: "#16a34a", fontWeight: "bold", padding: "10px 0" }}>✓ Service completed</span>
                   )}
                 </div>
@@ -767,7 +971,7 @@ function ProviderDashboard() {
 
 const statCardStyle = {
   backgroundColor: "white",
-  padding: "20px",
+  padding: "18px",
   borderRadius: "10px",
   textAlign: "center",
   boxShadow: "0 2px 8px rgba(0,0,0,0.06)",

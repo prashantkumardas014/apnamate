@@ -1,0 +1,160 @@
+/* frontend/src/styles/PhoneAuth.css */
+.phone-auth-root {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f5f7fb 0%, #eef2f7 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.phone-auth-card {
+  background: white;
+  border-radius: 16px;
+  padding: 36px 32px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+  border: 1px solid #e5e7eb;
+}
+
+.phone-auth-brand {
+  font-size: 20px;
+  font-weight: 800;
+  color: #2563eb;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.phone-auth-card h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  text-align: center;
+}
+
+.phone-auth-sub {
+  margin: 0 0 24px;
+  text-align: center;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.phone-input-wrap {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: white;
+  transition: border 0.15s, box-shadow 0.15s;
+}
+
+.phone-input-wrap:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.phone-prefix {
+  padding: 14px 14px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 14px;
+  border-right: 1px solid #e5e7eb;
+}
+
+.phone-input-wrap input {
+  flex: 1;
+  padding: 14px 16px;
+  border: none;
+  outline: none;
+  font-size: 16px;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  background: transparent;
+}
+
+.phone-auth-primary {
+  width: 100%;
+  margin-top: 18px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.phone-auth-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+}
+
+.phone-auth-primary:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.phone-auth-error,
+.phone-auth-info {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.phone-auth-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-left: 4px solid #dc2626;
+}
+
+.phone-auth-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border-left: 4px solid #2563eb;
+}
+
+.phone-auth-foot {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.phone-auth-foot a {
+  color: #2563eb;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.otp-inputs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.otp-inputs input {
+  width: 48px;
+  height: 56px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  transition: border 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+}
+
+.otp-inputs input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}

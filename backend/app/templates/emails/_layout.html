@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,Helvetica,sans-serif;color:#334155;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fb;padding:24px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr>
+          <td style="background:#2563eb;padding:24px;text-align:center;">
+            <div style="color:white;font-size:24px;font-weight:bold;letter-spacing:0.5px;">🔧 ApnaMate</div>
+            <div style="color:#dbeafe;font-size:13px;margin-top:4px;">{{ subtitle }}</div>
+          </td>
+        </tr>
+        <tr><td style="padding:28px 32px;">{{ content|safe }}</td></tr>
+        <tr>
+          <td style="background:#f8fafc;padding:18px 32px;text-align:center;font-size:12px;color:#64748b;">
+            This email was sent by ApnaMate · <a href="{{ support_url }}" style="color:#2563eb;">Contact support</a>
+            <br/><br/>
+            If you didn't request this, please ignore this email.
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

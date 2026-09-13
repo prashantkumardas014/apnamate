@@ -57,46 +57,35 @@ async def create_review(
     print(f"📤 Comment: {review_data.comment[:50] if review_data.comment else 'EMPTY'}...")
     print(f"👤 User: {current_user.id} - {current_user.role} - {current_user.name}")
     
-    # 1. Check if user is customer
     if current_user.role != "customer":
-        print(f"❌ User is not a customer: {current_user.role}")
         raise HTTPException(status_code=403, detail="Only customers can write reviews")
     
-    # 2. Check if booking exists and belongs to this customer
     booking = db.query(Booking).filter(
         Booking.id == review_data.booking_id,
         Booking.customer_id == current_user.id
     ).first()
     
     if not booking:
-        print(f"❌ Booking {review_data.booking_id} not found for customer {current_user.id}")
         raise HTTPException(status_code=404, detail="Booking not found or not yours")
     
-    print(f"✅ Booking found: ID={booking.id}, Status='{booking.status}', Service='{booking.service}'")
+    print(f"✅ Booking found: ID={booking.id}, Status='{booking.status}'")
     
-    # 3. Check if booking is completed
     if booking.status.lower() != "completed":
-        print(f"❌ Booking status is '{booking.status}', not 'completed'")
         raise HTTPException(
             status_code=400, 
             detail=f"Can only review completed bookings. Current status: {booking.status}"
         )
     
-    # 4. Check if already reviewed
     existing_review = db.query(Review).filter(
         Review.booking_id == review_data.booking_id
     ).first()
     
     if existing_review:
-        print(f"❌ Booking already has a review")
         raise HTTPException(status_code=400, detail="You already reviewed this booking")
     
-    # 5. Validate rating
     if review_data.rating < 1 or review_data.rating > 5:
-        print(f"❌ Invalid rating: {review_data.rating}")
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
     
-    # 6. Create review
     try:
         new_review = Review(
             booking_id=review_data.booking_id,
@@ -106,26 +95,19 @@ async def create_review(
             comment=review_data.comment,
             created_at=datetime.now()
         )
-        
         db.add(new_review)
         db.commit()
         db.refresh(new_review)
-        
         print(f"✅ Review created: ID={new_review.id}")
-        
     except Exception as e:
         db.rollback()
-        print(f"❌ Database error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
-    # 7. Update provider's average rating
     try:
         update_provider_rating(booking.provider_id, db)
-        print(f"✅ Provider rating updated")
     except Exception as e:
         print(f"⚠️ Error updating provider rating: {str(e)}")
     
-    # 8. Create notification for provider
     try:
         notification = Notification(
             user_id=booking.provider_id,
@@ -136,13 +118,8 @@ async def create_review(
         )
         db.add(notification)
         db.commit()
-        print(f"✅ Notification sent")
     except Exception as e:
         print(f"⚠️ Error creating notification: {str(e)}")
-    
-    print("=" * 60)
-    print("✅ Review submitted successfully!")
-    print("=" * 60)
     
     return {
         "success": True,
@@ -162,13 +139,9 @@ async def update_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update a review (only by the customer who wrote it)"""
-    
     review = db.query(Review).filter(Review.id == review_id).first()
-    
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    
     if review.customer_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only edit your own reviews")
     
@@ -183,7 +156,6 @@ async def update_review(
         review.comment = review_update.comment.strip()
     
     review.updated_at = datetime.now()
-    
     db.commit()
     db.refresh(review)
     
@@ -212,13 +184,9 @@ async def delete_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Delete a review (only by the customer who wrote it)"""
-    
     review = db.query(Review).filter(Review.id == review_id).first()
-    
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    
     if review.customer_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only delete your own reviews")
     
@@ -228,10 +196,7 @@ async def delete_review(
     
     update_provider_rating(provider_id, db)
     
-    return {
-        "success": True,
-        "message": "Review deleted successfully!"
-    }
+    return {"success": True, "message": "Review deleted successfully!"}
 
 @router.get("/reviews/booking/{booking_id}")
 async def check_booking_review(
@@ -239,8 +204,6 @@ async def check_booking_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Check if a booking has been reviewed by the current user"""
-    
     review = db.query(Review).filter(
         Review.booking_id == booking_id,
         Review.customer_id == current_user.id
@@ -257,59 +220,76 @@ async def check_booking_review(
         } if review else None
     }
 
+# ==============================
+# ✅ PROVIDER REVIEWS — fixed and hardened
+# ==============================
+
 @router.get("/reviews/provider/{provider_id}")
 async def get_provider_reviews(
     provider_id: int,
     page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(100, ge=1, le=200),   # ↑ default high so all reviews show
     db: Session = Depends(get_db)
 ):
-    """Get all reviews for a provider with pagination"""
-    
-    provider = db.query(User).filter(
-        User.id == provider_id,
-        User.role == "provider"
-    ).first()
-    
+    """
+    Get all reviews for a provider.
+    Response includes both flat fields and a nested `reviews` array for
+    maximum frontend compatibility.
+    """
+    provider = db.query(User).filter(User.id == provider_id).first()
     if not provider:
-        raise HTTPException(status_code=404, detail="Provider not found")
-    
-    total_count = db.query(Review).filter(
-        Review.provider_id == provider_id
-    ).count()
-    
+        raise HTTPException(status_code=404, detail=f"Provider {provider_id} not found")
+
+    total_count = db.query(Review).filter(Review.provider_id == provider_id).count()
+
     offset = (page - 1) * limit
-    reviews = db.query(Review).filter(
-        Review.provider_id == provider_id
-    ).order_by(desc(Review.created_at)).offset(offset).limit(limit).all()
-    
-    distribution = db.query(
-        Review.rating,
-        func.count(Review.id)
-    ).filter(Review.provider_id == provider_id).group_by(Review.rating).all()
-    
+    reviews = (
+        db.query(Review)
+        .filter(Review.provider_id == provider_id)
+        .order_by(desc(Review.created_at))
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    distribution = (
+        db.query(Review.rating, func.count(Review.id))
+        .filter(Review.provider_id == provider_id)
+        .group_by(Review.rating)
+        .all()
+    )
     rating_dist = {r: 0 for r in range(1, 6)}
     for rating, count in distribution:
         rating_dist[rating] = count
-    
-    avg_rating = db.query(func.avg(Review.rating)).filter(
-        Review.provider_id == provider_id
-    ).scalar() or 0
-    
+
+    avg_rating = (
+        db.query(func.avg(Review.rating))
+        .filter(Review.provider_id == provider_id)
+        .scalar()
+        or 0
+    )
+
     reviews_list = []
     for r in reviews:
         customer = db.query(User).filter(User.id == r.customer_id).first()
         reviews_list.append({
             "id": r.id,
+            "review_id": r.id,                 # alias for frontend
+            "booking_id": r.booking_id,
+            "customer_id": r.customer_id,
+            "customer_name": customer.name if customer else "Unknown",
+            "provider_id": r.provider_id,
             "rating": r.rating,
             "comment": r.comment,
-            "created_at": r.created_at,
-            "updated_at": r.updated_at,
-            "customer_name": customer.name if customer else "Unknown",
-            "customer_id": r.customer_id
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
         })
-    
+
+    print(f"📥 Reviews for provider {provider_id} ({provider.name}): {len(reviews_list)} of {total_count}")
+
+    # ✅ Return BOTH a wrapper object AND a flat array so any frontend works
     return {
+        "success": True,
         "provider_id": provider_id,
         "provider_name": provider.name,
         "average_rating": round(float(avg_rating), 1),
@@ -317,7 +297,9 @@ async def get_provider_reviews(
         "rating_distribution": rating_dist,
         "page": page,
         "limit": limit,
-        "reviews": reviews_list
+        "reviews": reviews_list,
+        # Alias so `Array.isArray(data)` checks also work if unwrapped
+        "data": reviews_list,
     }
 
 @router.get("/reviews/customer/my-reviews")
@@ -325,8 +307,6 @@ async def get_my_reviews(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all reviews written by the current customer"""
-    
     if current_user.role != "customer":
         raise HTTPException(status_code=403, detail="Only customers can access this")
     
@@ -356,7 +336,7 @@ async def get_my_reviews(
     }
 
 # ==============================
-# ANALYTICS ENDPOINT
+# ANALYTICS
 # ==============================
 
 @router.get("/analytics/provider/{provider_id}")
@@ -365,8 +345,6 @@ async def get_review_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get review analytics for a provider"""
-    
     if current_user.id != provider_id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized to view these analytics")
     
@@ -394,7 +372,6 @@ async def get_review_analytics(
     
     monthly_data = {}
     today = datetime.now()
-    
     for i in range(6):
         month = today - timedelta(days=30 * i)
         month_key = month.strftime("%Y-%m")
@@ -412,11 +389,7 @@ async def get_review_analytics(
             monthly_data[key]["avg"] = round(monthly_data[key]["total"] / monthly_data[key]["count"], 1)
     
     monthly_trend = [
-        {
-            "month": key,
-            "average_rating": data["avg"],
-            "total_reviews": data["count"]
-        }
+        {"month": key, "average_rating": data["avg"], "total_reviews": data["count"]}
         for key, data in sorted(monthly_data.items())
     ]
     
@@ -441,7 +414,7 @@ async def get_review_analytics(
     }
 
 # ==============================
-# ✅ ADMIN REVIEWS ENDPOINT - FIXED
+# ADMIN — all reviews
 # ==============================
 
 @router.get("/admin/reviews")
@@ -449,9 +422,6 @@ async def get_all_reviews_admin(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all reviews (Admin only)"""
-    
-    # Check if user is admin
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -459,16 +429,12 @@ async def get_all_reviews_admin(
         )
     
     try:
-        # Get all reviews with related data
         reviews = db.query(Review).order_by(desc(Review.created_at)).all()
         
         reviews_list = []
         for review in reviews:
-            # Get customer name
             customer = db.query(User).filter(User.id == review.customer_id).first()
-            # Get provider name
             provider = db.query(User).filter(User.id == review.provider_id).first()
-            # Get booking service
             booking = db.query(Booking).filter(Booking.id == review.booking_id).first()
             
             reviews_list.append({
@@ -485,11 +451,7 @@ async def get_all_reviews_admin(
                 "updated_at": review.updated_at.isoformat() if review.updated_at else None
             })
         
-        return {
-            "success": True,
-            "total": len(reviews_list),
-            "reviews": reviews_list
-        }
+        return {"success": True, "total": len(reviews_list), "reviews": reviews_list}
         
     except Exception as e:
         print(f"❌ Error fetching admin reviews: {str(e)}")
@@ -499,12 +461,10 @@ async def get_all_reviews_admin(
         )
 
 # ==============================
-# HELPER FUNCTIONS
+# HELPER
 # ==============================
 
 def update_provider_rating(provider_id: int, db: Session):
-    """Update provider's average rating and total count"""
-    
     avg_rating = db.query(func.avg(Review.rating)).filter(
         Review.provider_id == provider_id
     ).scalar() or 0

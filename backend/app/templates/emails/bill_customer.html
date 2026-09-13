@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>{{ subject }}</title></head>
+<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,Helvetica,sans-serif;color:#334155;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fb;padding:24px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr>
+          <td style="background:#16a34a;padding:24px;text-align:center;">
+            <div style="color:white;font-size:24px;font-weight:bold;">✅ Payment Confirmed</div>
+            <div style="color:#dcfce7;font-size:13px;margin-top:4px;">Booking #{{ bill.booking_id }}</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 32px;">
+            <p style="font-size:15px;margin:0 0 12px;">Hi <b>{{ bill.customer_name }}</b>,</p>
+            <p style="font-size:14px;line-height:1.6;margin:0 0 20px;">
+              Your payment of <b style="color:#16a34a;font-size:18px;">₹{{ "%.2f"|format(bill.paid_amount) }}</b>
+              for booking <b>#{{ bill.booking_id }}</b> has been verified and confirmed.
+            </p>
+
+            <table width="100%" cellpadding="10" style="background:#f0fdf4;border-radius:8px;font-size:14px;">
+              <tr><td style="color:#166534;"><b>Bill Number</b></td><td align="right">{{ bill.bill_number }}</td></tr>
+              <tr><td style="color:#166534;"><b>Service</b></td><td align="right">{{ bill.service }}</td></tr>
+              <tr><td style="color:#166534;"><b>Provider</b></td><td align="right">{{ bill.provider_name or "—" }}</td></tr>
+              <tr><td style="color:#166534;"><b>Scheduled</b></td><td align="right">{{ bill.booking_date }}</td></tr>
+              <tr><td style="color:#166534;"><b>Amount Paid</b></td><td align="right"><b>₹{{ "%.2f"|format(bill.paid_amount) }}</b></td></tr>
+            </table>
+
+            <p style="font-size:14px;line-height:1.6;margin:20px 0 8px;">
+              📎 Your invoice is attached as a PDF for your records.
+            </p>
+
+            <p style="font-size:14px;line-height:1.6;margin:20px 0 0;">
+              The service provider will contact you shortly to complete the job.
+            </p>
+
+            <p style="font-size:14px;margin:24px 0 0;">Thanks,<br/><b>Team ApnaMate</b></p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:18px 32px;text-align:center;font-size:12px;color:#64748b;">
+            Support: <a href="mailto:support@apnamate.local" style="color:#2563eb;">support@apnamate.local</a>
+            <br/>Bill {{ bill.bill_number }}
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

@@ -1,4 +1,4 @@
-﻿# backend/app/routes/__init__.py
+# backend/app/routes/__init__.py
 from . import bookings
 from . import reviews
 # Payments will be imported directly in main.py

@@ -1,5 +1,9 @@
 /* frontend/src/components/common/Navbar.css */
 
+/* =========================================================
+   BASE NAVBAR
+   ========================================================= */
+
 .navbar {
   display: flex;
   justify-content: space-between;
@@ -15,25 +19,37 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* ==============================
-   BRAND
-   ============================== */
-
 .navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif;
   font-size: 20px;
-  font-weight: bold;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: white;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, opacity 0.2s;
   white-space: nowrap;
+  user-select: none;
 }
 
 .navbar-brand:hover {
-  transform: scale(1.05);
+  transform: scale(1.04);
+  opacity: 0.95;
 }
 
-/* ==============================
-   MENU
-   ============================== */
+.navbar-brand img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+/* =========================================================
+   DESKTOP MENU
+   ========================================================= */
 
 .navbar-menu {
   display: flex;
@@ -57,6 +73,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  font-family: inherit;
 }
 
 .nav-item:hover {
@@ -69,13 +86,9 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.nav-label {
-  display: inline-block;
-}
-
-/* ==============================
-   NOTIFICATION BADGE
-   ============================== */
+/* =========================================================
+   NOTIFICATION BADGE (on desktop menu items)
+   ========================================================= */
 
 .notification-badge {
   position: absolute;
@@ -107,9 +120,9 @@
   }
 }
 
-/* ==============================
+/* =========================================================
    USER SECTION
-   ============================== */
+   ========================================================= */
 
 .navbar-user {
   display: flex;
@@ -128,17 +141,9 @@
   letter-spacing: 0.5px;
 }
 
-.user-role.role-admin {
-  background: #dc2626;
-}
-
-.user-role.role-provider {
-  background: #16a34a;
-}
-
-.user-role.role-customer {
-  background: rgba(255, 255, 255, 0.2);
-}
+.user-role.role-admin { background: #dc2626; }
+.user-role.role-provider { background: #16a34a; }
+.user-role.role-customer { background: rgba(255, 255, 255, 0.2); }
 
 .user-name {
   font-weight: 500;
@@ -157,6 +162,7 @@
   font-size: 13px;
   transition: all 0.2s;
   white-space: nowrap;
+  font-family: inherit;
 }
 
 .logout-btn:hover {
@@ -165,63 +171,257 @@
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
 }
 
-.logout-btn:active {
-  transform: translateY(0);
+/* =========================================================
+   HAMBURGER — hidden by default, shown on mobile
+   ========================================================= */
+
+.navbar-hamburger {
+  display: none;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  flex-shrink: 0;
 }
 
-/* ==============================
-   RESPONSIVE
-   ============================== */
+.navbar-hamburger:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* =========================================================
+   MOBILE TAB BAR — hidden on desktop
+   ========================================================= */
+
+.mobile-tabbar {
+  display: none;
+}
+
+/* =========================================================
+   RESPONSIVE — Tablet
+   ========================================================= */
 
 @media (max-width: 1024px) {
   .navbar {
     padding: 10px 16px;
   }
-
   .nav-item {
     padding: 6px 10px;
     font-size: 12px;
   }
 }
 
+/* =========================================================
+   RESPONSIVE — Mobile
+   ========================================================= */
+
 @media (max-width: 768px) {
+
+  /* Navbar: single row, LEFT-aligned */
   .navbar {
-    flex-direction: column;
-    padding: 12px 16px;
+    padding: 10px 14px;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
   }
 
-  .navbar-menu {
-    justify-content: center;
-    width: 100%;
-  }
-
+  /* Hide desktop menu & user block */
+  .navbar-menu,
   .navbar-user {
-    width: 100%;
-    justify-content: center;
+    display: none !important;
   }
 
-  .user-name {
-    font-size: 13px;
+  /* Hamburger — LEFT side */
+  .navbar-hamburger {
+    display: flex;
+    order: -1;
+    margin: 0;
+  }
+
+  /* Brand — sits next to hamburger, then auto-margin pushes rest away */
+  .navbar-brand {
+    order: 0;
+    font-size: 18px;
+    gap: 8px;
+    margin-right: auto;
+  }
+
+  .navbar-brand img {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* ---------- BOTTOM TAB BAR ---------- */
+  .mobile-tabbar {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+    z-index: 900;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 4px 10px;
+    background: none;
+    border: none;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.15s;
+    min-height: 56px;
+    font-family: inherit;
+  }
+
+  .tab-item:active {
+    background: #f1f5f9;
+  }
+
+  .tab-item.active {
+    color: #2563eb;
+  }
+
+  .tab-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .tab-label {
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    font-weight: 600;
+  }
+
+  .tab-badge {
+    position: absolute;
+    top: 4px;
+    right: 22%;
+    background: #ef4444;
+    color: white;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 999px;
+    min-width: 16px;
+    text-align: center;
   }
 }
 
-@media (max-width: 480px) {
+/* =========================================================
+   RESPONSIVE — Extra small screens (<400px)
+   ========================================================= */
+
+@media (max-width: 400px) {
+  .navbar-brand span {
+    display: none;
+  }
+  .navbar-brand img {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* =========================================================
+   DRAWER ANIMATION (used by inline styles in Navbar.jsx)
+   ---------------------------------------------------------
+   Slides in from the LEFT side
+   ========================================================= */
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* =========================================================
+   Prevent content from being hidden behind the tab bar
+   ========================================================= */
+
+@media (max-width: 768px) {
+  .main-content {
+    padding-bottom: 68px !important;
+  }
+}
+
+/* =========================================================
+   MOBILE NAVBAR — spacing fix
+   ========================================================= */
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 12px 16px !important;
+    gap: 14px !important;
+    min-height: 60px;
+  }
+
+  .navbar-hamburger {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 11px !important;
+    font-size: 20px !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
   .navbar-brand {
-    font-size: 18px;
+    display: flex !important;
+    align-items: center;
+    gap: 8px !important;
+    font-size: 17px !important;
+    flex: 1;
+    min-width: 0;
   }
 
-  .nav-item {
-    padding: 5px 8px;
-    font-size: 11px;
+  .navbar-brand span {
+    display: inline-block !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .user-role {
-    font-size: 10px;
-    padding: 3px 8px;
+  .navbar-brand img {
+    width: 26px !important;
+    height: 26px !important;
+  }
+}
+
+/* Very small phones — hide brand text, keep logo */
+@media (max-width: 400px) {
+  .navbar {
+    padding: 12px 14px !important;
   }
 
-  .logout-btn {
-    padding: 5px 12px;
-    font-size: 12px;
+  .navbar-brand span {
+    display: none !important;
+  }
+
+  .navbar-hamburger {
+    width: 40px !important;
+    height: 40px !important;
+    font-size: 19px !important;
   }
 }

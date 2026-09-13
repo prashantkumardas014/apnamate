@@ -1,0 +1,339 @@
+/* frontend/src/pages/HomeFeed.css */
+
+.homefeed-root {
+  min-height: 100vh;
+  background: #f5f7fb;
+  margin: 0;
+  padding: 0;
+  padding-bottom: 40px;
+}
+
+/* =========================================================
+   HERO — flush with navbar (no gap above)
+   ========================================================= */
+
+.homefeed-hero {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  color: white;
+  padding: 32px 20px 72px;
+  margin: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.homefeed-hero::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.10), transparent 70%);
+  pointer-events: none;
+}
+
+.homefeed-hero-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.homefeed-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.homefeed-title {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: white;
+}
+
+.homefeed-sub {
+  margin: 0;
+  color: #dbeafe;
+  font-size: 14px;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   BODY — floats slightly over the hero
+   ========================================================= */
+
+.homefeed-body {
+  max-width: 1100px;
+  margin: -52px auto 0;
+  padding: 0 20px;
+  position: relative;
+  z-index: 2;
+}
+
+/* =========================================================
+   STATS
+   ========================================================= */
+
+.homefeed-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.homefeed-stat {
+  background: white;
+  border-radius: 14px;
+  padding: 16px 18px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: transform 0.15s, box-shadow 0.15s;
+  cursor: default;
+}
+
+.homefeed-stat.clickable {
+  cursor: pointer;
+}
+
+.homefeed-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.homefeed-stat-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.homefeed-stat-body {
+  min-width: 0;
+}
+
+.homefeed-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.homefeed-stat-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* =========================================================
+   CARD
+   ========================================================= */
+
+.homefeed-card {
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  padding: 22px;
+}
+
+.homefeed-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.homefeed-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.homefeed-card-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.homefeed-card-link:hover {
+  background: #eff6ff;
+}
+
+/* =========================================================
+   LIST
+   ========================================================= */
+
+.homefeed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.homefeed-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+}
+
+.homefeed-item-left {
+  min-width: 0;
+  flex: 1;
+}
+
+.homefeed-item-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.homefeed-item-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.homefeed-item-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* =========================================================
+   EMPTY
+   ========================================================= */
+
+.homefeed-empty {
+  text-align: center;
+  padding: 30px 20px;
+}
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .homefeed-hero {
+    padding: 26px 16px 64px;
+    margin: 0;
+  }
+
+  .homefeed-title {
+    font-size: 22px;
+  }
+
+  .homefeed-sub {
+    font-size: 13px;
+  }
+
+  .homefeed-body {
+    margin-top: -48px;
+    padding: 0 14px;
+  }
+
+  .homefeed-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .homefeed-stat {
+    padding: 14px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .homefeed-stat-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    border-radius: 10px;
+  }
+
+  .homefeed-stat-value {
+    font-size: 20px;
+  }
+
+  .homefeed-stat-label {
+    font-size: 11px;
+  }
+
+  .homefeed-card {
+    padding: 16px;
+  }
+
+  .homefeed-card-title {
+    font-size: 15px;
+  }
+
+  .homefeed-item {
+    padding: 10px 12px;
+  }
+
+  .homefeed-item-title {
+    font-size: 13px;
+  }
+
+  .homefeed-item-meta {
+    font-size: 11px;
+  }
+
+  .homefeed-item-status {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+}
+
+@media (max-width: 400px) {
+  .homefeed-title {
+    font-size: 20px;
+  }
+
+  .homefeed-stat-value {
+    font-size: 18px;
+  }
+}

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config";
+import PageHero from "../components/common/PageHero";
 /* eslint-disable react/set-state-in-effect, react/immutability */
 
 function Notifications() {
@@ -101,7 +102,6 @@ function Notifications() {
         throw new Error("Failed to mark notification as read");
       }
 
-      // Update local state
       setNotifications((prev) =>
         prev.map((n) =>
           n.id === notificationId ? { ...n, is_read: 1 } : n
@@ -139,10 +139,7 @@ function Notifications() {
         throw new Error("Failed to mark all notifications as read");
       }
 
-      // Update local state
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, is_read: 1 }))
-      );
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: 1 })));
     } catch (error) {
       console.error("Error marking notifications:", error);
       setError(error.message || "Unable to mark all as read");
@@ -181,10 +178,7 @@ function Notifications() {
         throw new Error("Failed to delete notification");
       }
 
-      // Update local state
-      setNotifications((prev) =>
-        prev.filter((n) => n.id !== notificationId)
-      );
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
     } catch (error) {
       console.error("Error deleting notification:", error);
       setError(error.message || "Unable to delete notification");
@@ -223,7 +217,6 @@ function Notifications() {
         throw new Error("Failed to clear notifications");
       }
 
-      // Update local state
       setNotifications([]);
     } catch (error) {
       console.error("Error clearing notifications:", error);
@@ -258,7 +251,7 @@ function Notifications() {
 
   const getTimeAgo = (dateString) => {
     if (!dateString) return "";
-    
+
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now - date;
@@ -274,6 +267,17 @@ function Notifications() {
   };
 
   // ==============================
+  // ROLE-AWARE DASHBOARD ROUTE
+  // ==============================
+
+  const dashboardRoute = () => {
+    if (!user) return "/dashboard";
+    if (user.role === "admin") return "/admin-dashboard";
+    if (user.role === "provider") return "/provider-dashboard";
+    return "/dashboard";
+  };
+
+  // ==============================
   // RENDER
   // ==============================
 
@@ -286,69 +290,46 @@ function Notifications() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: "#f5f7fb",
-        padding: "30px 20px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "800px",
-          margin: "0 auto",
-        }}
-      >
-        {/* ============================== */}
-        {/* HEADER */}
-        {/* ============================== */}
+    <div className="notifications-page">
+      {/* HERO */}
+      <PageHero
+        badge="🔔 Alerts"
+        title="Notifications"
+        subtitle={
+          unreadCount > 0
+            ? `${unreadCount} unread notification${unreadCount !== 1 ? "s" : ""}`
+            : "You're all caught up"
+        }
+        actions={[
+          {
+            label: "Dashboard",
+            icon: "📊",
+            onClick: () => navigate(dashboardRoute()),
+            variant: "primary",
+          },
+          ...(unreadCount > 0
+            ? [{
+                label: "Mark all read",
+                icon: "✅",
+                onClick: markAllAsRead,
+                variant: "ghost",
+              }]
+            : []),
+          ...(notifications.length > 0
+            ? [{
+                label: "Clear all",
+                icon: "🗑️",
+                onClick: clearAllNotifications,
+                variant: "danger",
+              }]
+            : []),
+        ]}
+      />
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "25px",
-            flexWrap: "wrap",
-            gap: "15px",
-          }}
-        >
-          <div>
-            <h1 style={{ margin: 0, color: "#1e293b" }}>
-              🔔 Notifications
-            </h1>
+      {/* BODY */}
+      <div className="page-body" style={{ maxWidth: 800 }}>
 
-            <p style={{ color: "#6b7280", margin: "4px 0 0" }}>
-              {unreadCount} unread notification
-              {unreadCount !== 1 ? "s" : ""}
-            </p>
-          </div>
-
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => navigate("/dashboard")}
-              style={{
-                padding: "10px 16px",
-                border: "none",
-                borderRadius: "6px",
-                backgroundColor: "#6b7280",
-                color: "white",
-                cursor: "pointer",
-                fontWeight: "bold",
-                transition: "background 0.2s",
-              }}
-              onMouseEnter={(e) => e.target.style.background = "#4b5563"}
-              onMouseLeave={(e) => e.target.style.background = "#6b7280"}
-            >
-              📊 Dashboard
-            </button>
-          </div>
-        </div>
-
-        {/* ============================== */}
-        {/* ERROR MESSAGE */}
-        {/* ============================== */}
-
+        {/* ERROR */}
         {error && (
           <div
             style={{
@@ -371,6 +352,7 @@ function Notifications() {
                 border: "none",
                 borderRadius: "4px",
                 cursor: "pointer",
+                fontFamily: "inherit",
               }}
             >
               Retry
@@ -378,73 +360,7 @@ function Notifications() {
           </div>
         )}
 
-        {/* ============================== */}
-        {/* ACTION BUTTONS */}
-        {/* ============================== */}
-
-        {!loading && notifications.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              marginBottom: "20px",
-              flexWrap: "wrap",
-            }}
-          >
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllAsRead}
-                disabled={actionLoading}
-                style={{
-                  padding: "10px 16px",
-                  border: "none",
-                  borderRadius: "6px",
-                  backgroundColor: actionLoading ? "#9ca3af" : "#2563eb",
-                  color: "white",
-                  cursor: actionLoading ? "not-allowed" : "pointer",
-                  fontWeight: "bold",
-                  transition: "background 0.2s",
-                }}
-                onMouseEnter={(e) => {
-                  if (!actionLoading) e.target.style.background = "#1d4ed8";
-                }}
-                onMouseLeave={(e) => {
-                  if (!actionLoading) e.target.style.background = "#2563eb";
-                }}
-              >
-                {actionLoading ? "⏳ Processing..." : "📖 Mark All as Read"}
-              </button>
-            )}
-
-            <button
-              onClick={clearAllNotifications}
-              disabled={actionLoading || notifications.length === 0}
-              style={{
-                padding: "10px 16px",
-                border: "none",
-                borderRadius: "6px",
-                backgroundColor: actionLoading || notifications.length === 0 ? "#9ca3af" : "#dc2626",
-                color: "white",
-                cursor: actionLoading || notifications.length === 0 ? "not-allowed" : "pointer",
-                fontWeight: "bold",
-                transition: "background 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                if (!actionLoading && notifications.length > 0) e.target.style.background = "#b91c1c";
-              }}
-              onMouseLeave={(e) => {
-                if (!actionLoading && notifications.length > 0) e.target.style.background = "#dc2626";
-              }}
-            >
-              🗑️ Clear All
-            </button>
-          </div>
-        )}
-
-        {/* ============================== */}
         {/* LOADING */}
-        {/* ============================== */}
-
         {loading && (
           <div
             style={{
@@ -455,28 +371,24 @@ function Notifications() {
               boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
             }}
           >
-            <div className="spinner" style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #e5e7eb",
-              borderTopColor: "#2563eb",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-              margin: "0 auto 16px",
-            }}></div>
+            <div
+              className="spinner"
+              style={{
+                width: "48px",
+                height: "48px",
+                border: "4px solid #e5e7eb",
+                borderTopColor: "#2563eb",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+                margin: "0 auto 16px",
+              }}
+            ></div>
             <p style={{ color: "#6b7280" }}>Loading notifications...</p>
-            <style>{`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
-            `}</style>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}
 
-        {/* ============================== */}
         {/* EMPTY STATE */}
-        {/* ============================== */}
-
         {!loading && notifications.length === 0 && (
           <div
             style={{
@@ -487,9 +399,7 @@ function Notifications() {
               boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
             }}
           >
-            <div style={{ fontSize: "64px", marginBottom: "16px" }}>
-              🔔
-            </div>
+            <div style={{ fontSize: "64px", marginBottom: "16px" }}>🔔</div>
 
             <h2 style={{ margin: "0 0 8px 0", color: "#1e293b" }}>
               No Notifications
@@ -506,9 +416,10 @@ function Notifications() {
                 backgroundColor: "#2563eb",
                 color: "white",
                 border: "none",
-                borderRadius: "6px",
+                borderRadius: "8px",
                 cursor: "pointer",
                 fontWeight: "bold",
+                fontFamily: "inherit",
               }}
             >
               Browse Services →
@@ -516,10 +427,7 @@ function Notifications() {
           </div>
         )}
 
-        {/* ============================== */}
         {/* NOTIFICATIONS LIST */}
-        {/* ============================== */}
-
         {!loading && notifications.length > 0 && (
           <div>
             <p style={{ color: "#6b7280", marginBottom: "16px" }}>
@@ -533,20 +441,11 @@ function Notifications() {
                 style={{
                   backgroundColor: notification.is_read === 0 ? "#eff6ff" : "white",
                   border: notification.is_read === 0 ? "1px solid #bfdbfe" : "1px solid #e5e7eb",
-                  padding: "20px",
-                  borderRadius: "10px",
-                  marginBottom: "15px",
+                  padding: "18px 20px",
+                  borderRadius: "12px",
+                  marginBottom: "12px",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-                  transition: "transform 0.2s, box-shadow 0.2s",
                   position: "relative",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "scale(1.01)";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "scale(1)";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)";
                 }}
               >
                 <div
@@ -557,7 +456,7 @@ function Notifications() {
                     alignItems: "flex-start",
                   }}
                 >
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
                         display: "flex",
@@ -574,6 +473,7 @@ function Notifications() {
                         style={{
                           margin: 0,
                           fontWeight: notification.is_read === 0 ? "bold" : "normal",
+                          fontSize: 15,
                         }}
                       >
                         {notification.title}
@@ -599,6 +499,7 @@ function Notifications() {
                         margin: "4px 0",
                         color: "#555",
                         lineHeight: "1.5",
+                        fontSize: 14,
                       }}
                     >
                       {notification.message}
@@ -637,13 +538,7 @@ function Notifications() {
                           fontSize: "12px",
                           fontWeight: "bold",
                           whiteSpace: "nowrap",
-                          transition: "background 0.2s",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!actionLoading) e.target.style.background = "#1d4ed8";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!actionLoading) e.target.style.background = "#2563eb";
+                          fontFamily: "inherit",
                         }}
                       >
                         ✓ Mark Read
@@ -663,13 +558,7 @@ function Notifications() {
                         fontSize: "12px",
                         fontWeight: "bold",
                         whiteSpace: "nowrap",
-                        transition: "background 0.2s",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!actionLoading) e.target.style.background = "#b91c1c";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!actionLoading) e.target.style.background = "#dc2626";
+                        fontFamily: "inherit",
                       }}
                     >
                       🗑️ Delete
@@ -680,6 +569,7 @@ function Notifications() {
             ))}
           </div>
         )}
+
       </div>
     </div>
   );

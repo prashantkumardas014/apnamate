@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { API_BASE_URL } from '../../config';
 import './PaymentModal.css';
 
-const PaymentModal = ({ booking, onClose, onSuccess }) => {
+const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedGateway, setSelectedGateway] = useState('upi');
@@ -11,40 +11,46 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
   const [upiDetails, setUpiDetails] = useState(null);
   const [copied, setCopied] = useState('');
 
-  // ✅ NEW: proof-of-payment state
+  // Proof-of-payment state
   const [utrNumber, setUtrNumber] = useState('');
   const [screenshotFile, setScreenshotFile] = useState(null);
   const [submitted, setSubmitted] = useState(false);
 
   // ==============================
-  // FALLBACK UPI DETAILS
+  // FALLBACK UPI DETAILS (display only — never used for amount)
   // ==============================
   const FALLBACK_UPI_ID = 'pd5935306@oksbi';
   const FALLBACK_UPI_PHONE = '7069112526';
 
   // ==============================
-  // ✅ GET AMOUNT — quote-first
+  // GET AMOUNT — quote only (NO 500 fallback!)
   // ==============================
   const getAmount = () => {
+    // Priority 1: quoted_amount (source of truth for pending payments)
     if (booking?.quoted_amount !== undefined && booking?.quoted_amount !== null) {
       const q = Number(booking.quoted_amount);
-      if (!isNaN(q) && q > 0) return q;
+      if (!isNaN(q) && q > 0) return Math.round(q);
     }
+    // Priority 2: paid_amount (for records where payment already cleared)
+    if (booking?.paid_amount !== undefined && booking?.paid_amount !== null) {
+      const p = Number(booking.paid_amount);
+      if (!isNaN(p) && p > 0) return Math.round(p);
+    }
+    // Priority 3: legacy `price` string
     if (booking?.price) {
       const num = parseInt(String(booking.price).replace(/[^0-9]/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return 500;
+    // ✅ NO 500 fallback. Return 0 so hasQuote() fails safely.
+    return 0;
   };
 
   // ==============================
   // IS PAYMENT ALLOWED?
   // ==============================
   const hasQuote = () => {
-    if (booking?.quoted_amount === undefined || booking?.quoted_amount === null) {
-      return false;
-    }
-    return Number(booking.quoted_amount) > 0;
+    const amt = getAmount();
+    return Number.isFinite(amt) && amt > 0;
   };
 
   // ==============================
@@ -52,14 +58,27 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
   // ==============================
   const openUpiApp = () => {
     const amount = getAmount();
+    if (!amount) {
+      setError('No payable amount found. Please refresh and try again.');
+      return;
+    }
+
     const upiId = upiDetails?.upi_id || FALLBACK_UPI_ID;
     const name = 'ApnaMate';
     const transactionNote = `Booking-${booking.id}`;
 
-    const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(name)}&am=${amount}&cu=INR&tn=${encodeURIComponent(transactionNote)}`;
+    const params = new URLSearchParams({
+      pa: upiId,
+      pn: name,
+      am: amount.toFixed(2),
+      cu: 'INR',
+      tn: transactionNote,
+    });
 
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-    const isMobile = /android|iPad|iPhone|iPod/i.test(userAgent);
+    const upiUrl = `upi://pay?${params.toString()}`;
+
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera || '';
+    const isMobile = /android|iPhone|iPad|iPod/i.test(userAgent);
 
     if (isMobile) {
       window.location.href = upiUrl;
@@ -97,11 +116,14 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
       const token = localStorage.getItem('accessToken');
       if (!token) throw new Error('Please login again');
 
-      if (!hasQuote()) {
-        throw new Error('No quote found for this booking. Please contact your provider.');
-      }
-
       const amount = getAmount();
+
+      // ✅ Guard: refuse to send a 0 or invalid amount
+      if (!hasQuote() || amount <= 0) {
+        throw new Error(
+          'No payable amount found for this booking. The quote may have changed — please refresh and try again.'
+        );
+      }
 
       const response = await fetch(`${API_BASE_URL}/bookings/payments/create`, {
         method: 'POST',
@@ -112,7 +134,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         body: JSON.stringify({
           booking_id: booking.id,
           gateway: selectedGateway,
-          amount: amount,
+          amount: Number(amount),          // ✅ exact integer, no drift
           currency: 'INR',
         }),
       });
@@ -123,6 +145,13 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         throw new Error(data.detail || 'Failed to initialize payment');
       }
 
+      // ✅ Sanity check: backend echoed amount must match what we sent
+      if (data.amount !== undefined && Number(data.amount) !== Number(amount)) {
+        throw new Error(
+          `Server returned ₹${data.amount} but expected ₹${amount}. Please refresh and try again.`
+        );
+      }
+
       if (selectedGateway === 'upi') {
         setQrCode(data.qr_code);
         setUpiDetails({
@@ -130,6 +159,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
           upi_phone: data.upi_phone || FALLBACK_UPI_PHONE,
           upi_url: data.upi_url,
           reference: data.gateway_order_id,
+          payment_id: data.payment_id,
         });
         setLoading(false);
         return;
@@ -149,17 +179,20 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         }
         if (data.key_id) {
           openRazorpayCheckout(data);
+        } else {
+          setError('Payment gateway did not return a key. Please try again.');
+          setLoading(false);
         }
       }
     } catch (err) {
-      console.error("❌ Payment error:", err);
+      console.error('❌ Payment error:', err);
       setError(err.message);
       setLoading(false);
     }
   };
 
   // ==============================
-  // ✅ SUBMIT UPI PAYMENT FOR VERIFICATION
+  // SUBMIT UPI PAYMENT FOR VERIFICATION
   // ==============================
   const submitUpiPayment = async () => {
     try {
@@ -171,6 +204,11 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
       }
 
       const token = localStorage.getItem('accessToken');
+      const amount = getAmount();
+
+      if (amount <= 0) {
+        throw new Error('Invalid payment amount. Please restart the payment flow.');
+      }
 
       // 1. Tell backend the customer claims to have paid
       const response = await fetch(`${API_BASE_URL}/bookings/payments/verify`, {
@@ -194,24 +232,25 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
       }
 
       // 2. Upload screenshot if provided
-      if (screenshotFile && data.payment_id) {
+      const resolvedPaymentId = data.payment_id || upiDetails?.payment_id;
+      if (screenshotFile && resolvedPaymentId) {
         const fd = new FormData();
         fd.append('file', screenshotFile);
         try {
-          await fetch(`${API_BASE_URL}/bookings/payments/${data.payment_id}/screenshot`, {
+          await fetch(`${API_BASE_URL}/bookings/payments/${resolvedPaymentId}/screenshot`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: fd,
           });
         } catch (uploadErr) {
           console.warn('Screenshot upload failed:', uploadErr);
-          // Not fatal — continue
         }
       }
 
+      setSubmitted(true);
+
       // 3. Open WhatsApp with prefilled message
       const phone = upiDetails?.upi_phone || FALLBACK_UPI_PHONE;
-      const amount = getAmount();
       const waText = encodeURIComponent(
         `Hi, I paid ₹${amount} for booking #${booking.id}. UTR: ${utrNumber.trim()}. Screenshot attached.`
       );
@@ -222,21 +261,25 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         navigator.clipboard?.writeText(phone).catch(() => {});
       }
 
-      setSubmitted(true);
-
       alert(
-        `✅ Payment submitted!\n\n` +
-        `Amount: ₹${amount}\n` +
-        `Booking: #${booking.id}\n` +
-        `UTR: ${utrNumber}\n\n` +
-        `📸 Please send your screenshot on WhatsApp:\n${phone}\n\n` +
-        `Admin will verify and confirm your booking shortly.`
+        `⏳ Payment submitted for verification!\n\n` +
+          `Amount: ₹${amount}\n` +
+          `Booking: #${booking.id}\n` +
+          `UTR: ${utrNumber}\n\n` +
+          `📸 Please send your screenshot on WhatsApp:\n${phone}\n\n` +
+          `Admin will verify and confirm your booking shortly. ` +
+          `You'll be notified once approved.`
       );
 
-      if (onSuccess) onSuccess(data);
+      // ✅ UPI needs admin approval — use onPendingVerification
+      if (onPendingVerification) {
+        onPendingVerification({ ...data, amount, utr: utrNumber.trim() });
+      } else if (onSuccess) {
+        onSuccess({ ...data, amount });
+      }
       onClose();
     } catch (err) {
-      console.error("❌ Submit error:", err);
+      console.error('❌ Submit error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -248,6 +291,9 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
   // ==============================
   const openRazorpayCheckout = (data) => {
     try {
+      const stored = localStorage.getItem('user');
+      const parsedUser = stored ? JSON.parse(stored) : {};
+
       const options = {
         key: data.key_id,
         amount: data.amount,
@@ -259,8 +305,8 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
           verifyPayment('razorpay', response);
         },
         prefill: {
-          name: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).name : '',
-          email: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).email : '',
+          name: parsedUser.name || '',
+          email: parsedUser.email || '',
         },
         theme: { color: '#2563eb' },
         modal: { ondismiss: () => setLoading(false) },
@@ -290,8 +336,10 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         },
         body: JSON.stringify({
           gateway: gateway,
-          payment_id: response.razorpay_payment_id,
-          transaction_id: response.razorpay_order_id,
+          payment_id: booking.id,
+          transaction_id: response.razorpay_payment_id,
+          order_id: response.razorpay_order_id,
+          signature: response.razorpay_signature,
         }),
       });
 
@@ -301,6 +349,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         throw new Error(data.detail || 'Payment verification failed');
       }
 
+      // Razorpay is auto-verified — this is a real success
       if (onSuccess) onSuccess(data);
       onClose();
     } catch (err) {
@@ -313,7 +362,6 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
   // RENDER UPI
   // ==============================
   const renderUpiSection = () => {
-    // Initial state — show "Generate QR" button
     if (!qrCode && !upiDetails) {
       return (
         <button className="pay-now-btn" onClick={initializePayment} disabled={loading}>
@@ -329,12 +377,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
           <p>Step 1: Pay the amount below. Step 2: Submit UTR + screenshot.</p>
         </div>
 
-        {/* Open UPI app button */}
-        <button
-          className="open-upi-app-btn"
-          onClick={openUpiApp}
-          disabled={loading}
-        >
+        <button className="open-upi-app-btn" onClick={openUpiApp} disabled={loading || submitted}>
           <span className="upi-app-icon">📲</span>
           <span className="upi-app-text">
             <strong>Open UPI App & Pay ₹{getAmount()}</strong>
@@ -396,9 +439,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
           </div>
         </div>
 
-        {/* ============================================ */}
-        {/* NEW: Step 2 — Submit proof of payment       */}
-        {/* ============================================ */}
+        {/* Step 2 — Submit proof */}
         <div
           style={{
             marginTop: 20,
@@ -421,7 +462,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
               value={utrNumber}
               onChange={(e) => setUtrNumber(e.target.value)}
               placeholder="e.g. 412345678901"
-              disabled={loading}
+              disabled={loading || submitted}
               style={{
                 width: '100%',
                 padding: '10px 12px',
@@ -443,7 +484,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
             <input
               type="file"
               accept="image/*"
-              disabled={loading}
+              disabled={loading || submitted}
               onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
               style={{ fontSize: 13 }}
             />
@@ -465,16 +506,33 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
           onClick={submitUpiPayment}
           disabled={loading || !utrNumber.trim() || submitted}
           style={{
-            opacity: (!utrNumber.trim() || submitted) ? 0.5 : 1,
-            cursor: (!utrNumber.trim() || submitted) ? 'not-allowed' : 'pointer',
+            opacity: !utrNumber.trim() || submitted ? 0.5 : 1,
+            cursor: !utrNumber.trim() || submitted ? 'not-allowed' : 'pointer',
           }}
         >
           {loading
             ? 'Submitting...'
             : submitted
-              ? '✅ Submitted'
+              ? '⏳ Awaiting Admin Verification'
               : '✅ I Have Paid — Submit for Verification'}
         </button>
+
+        {submitted && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: '12px 16px',
+              background: '#fef9c3',
+              border: '1px solid #fcd34d',
+              borderRadius: 8,
+              color: '#854d0e',
+              fontWeight: 'bold',
+              fontSize: 13,
+            }}
+          >
+            ⏳ Submitted! Please wait while the admin verifies your payment.
+          </div>
+        )}
 
         <button
           className="back-btn"
@@ -484,6 +542,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
             setError('');
             setUtrNumber('');
             setScreenshotFile(null);
+            setSubmitted(false);
           }}
           disabled={loading}
           style={{
@@ -509,9 +568,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
       <div className="cod-info">
         <h3>💰 Cash on Delivery</h3>
         <p>Pay <strong>₹{getAmount()}</strong> in cash when the service is completed.</p>
-        <p className="cod-note">
-          The provider will collect payment directly from you.
-        </p>
+        <p className="cod-note">The provider will collect payment directly from you.</p>
       </div>
 
       <button className="pay-now-btn" onClick={initializePayment} disabled={loading}>
@@ -538,7 +595,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
         <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
           <div className="payment-modal-header">
             <h2>💳 Complete Payment</h2>
-            <button className="close-btn" onClick={onClose}>×</button>
+            <button className="close-btn" onClick={onClose} aria-label="Close">×</button>
           </div>
           <div className="payment-modal-body">
             <div
@@ -587,7 +644,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
       <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
         <div className="payment-modal-header">
           <h2>💳 Complete Payment</h2>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <button className="close-btn" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="payment-modal-body">
@@ -595,7 +652,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
           <div className="booking-summary">
             <h3>Booking Summary</h3>
             <p><strong>Service:</strong> {booking.service}</p>
-            <p><strong>Provider:</strong> {booking.provider_name}</p>
+            <p><strong>Provider:</strong> {booking.provider_name || 'Awaiting assignment'}</p>
             <p><strong>Date:</strong> {booking.date}</p>
             <p>
               <strong>Quoted Amount:</strong>{' '}
@@ -623,6 +680,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
                   setError('');
                   setUtrNumber('');
                   setScreenshotFile(null);
+                  setSubmitted(false);
                 }}
                 disabled={loading}
               >
@@ -636,6 +694,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
                   setQrCode(null);
                   setUpiDetails(null);
                   setError('');
+                  setSubmitted(false);
                 }}
                 disabled={loading}
               >
@@ -649,6 +708,7 @@ const PaymentModal = ({ booking, onClose, onSuccess }) => {
                   setQrCode(null);
                   setUpiDetails(null);
                   setError('');
+                  setSubmitted(false);
                 }}
                 disabled={loading}
               >
