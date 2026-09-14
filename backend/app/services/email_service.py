@@ -1,9 +1,10 @@
 # backend/app/services/email_service.py
+"""
+Email delivery via Brevo HTTP API (bypasses Render's SMTP block).
+"""
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.application import MIMEApplication
+import base64
+import requests
 from datetime import datetime, timedelta
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -13,19 +14,13 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 # CONFIG
 # ==============================
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
-SMTP_USE_SSL = os.getenv("SMTP_USE_SSL", "false").lower() == "true"
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "ApnaMate")
-SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER)
-
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", os.getenv("SMTP_USER", ""))
 SUPPORT_URL = os.getenv("SUPPORT_URL", "mailto:support@apnamate.local")
 
-# Templates folder — resolves to backend/app/templates/emails/
 TEMPLATE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "templates", "emails"
@@ -37,13 +32,12 @@ _env = Environment(
 )
 
 
-def _smtp_configured() -> bool:
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+def _brevo_configured() -> bool:
+    return bool(BREVO_API_KEY and SMTP_FROM_EMAIL)
 
 
 def render_template(template_name: str, **kwargs) -> str:
     """Render an email template from app/templates/emails/."""
-    # Always provide common defaults
     kwargs.setdefault("subject", "ApnaMate Notification")
     kwargs.setdefault("subtitle", "")
     kwargs.setdefault("content", "")
@@ -57,7 +51,6 @@ def render_template(template_name: str, **kwargs) -> str:
 # ==============================
 
 def _recent_email_count(db, to_email: str, hours: int = 1) -> int:
-    """Return how many emails were sent to this address in the last N hours."""
     if db is None:
         return 0
     try:
@@ -73,7 +66,7 @@ def _recent_email_count(db, to_email: str, hours: int = 1) -> int:
 
 
 # ==============================
-# SEND EMAIL
+# SEND EMAIL (Brevo)
 # ==============================
 
 def send_email(
@@ -88,18 +81,18 @@ def send_email(
     booking_id: int = None,
 ):
     """
-    Send an email via SMTP. Returns:
-      {"success": bool, "error": str | None}
+    Send email via Brevo HTTP API.
+    Returns: {"success": bool, "error": str|None}
 
-    - attachments: list of dicts with keys: data (bytes), maintype, subtype, filename
-    - db: SQLAlchemy Session — if passed, an EmailLog row is written
+    - attachments: list of dicts {data: bytes, filename: str, subtype: "pdf"}
+    - db: SQLAlchemy Session — logs to EmailLog table
     """
     result = {"success": False, "error": None}
 
     # ----- Rate limit -----
     if db is not None and _recent_email_count(db, to_email, hours=1) >= 5:
         result["error"] = "Rate limit: too many emails to this address in the last hour"
-        print(f"Rate limited: {to_email}")
+        print(f"⚠️ Rate limited: {to_email}")
         return result
 
     # ----- Log row (pending) -----
@@ -120,13 +113,13 @@ def send_email(
             db.commit()
             db.refresh(log)
         except Exception as e:
-            print(f"EmailLog create failed: {e}")
+            print(f"⚠️ EmailLog create failed: {e}")
             log = None
 
-    # ----- SMTP not configured? skip real send -----
-    if not _smtp_configured():
-        msg = "SMTP not configured — email skipped"
-        print(msg)
+    # ----- Brevo not configured? skip -----
+    if not _brevo_configured():
+        msg = "BREVO_API_KEY or SMTP_FROM_EMAIL not set — email skipped"
+        print(f"⚠️ {msg}")
         if log is not None:
             log.status = "failed"
             log.error = msg
@@ -134,56 +127,75 @@ def send_email(
         result["error"] = msg
         return result
 
+    # ----- Build Brevo payload -----
+    payload = {
+        "sender": {
+            "name": SMTP_FROM_NAME,
+            "email": SMTP_FROM_EMAIL,
+        },
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_body,
+    }
+
+    if text_body:
+        payload["textContent"] = text_body
+
+    # Attachments — Brevo expects base64-encoded content
+    if attachments:
+        payload["attachment"] = []
+        for att in attachments:
+            try:
+                payload["attachment"].append({
+                    "content": base64.b64encode(att["data"]).decode("utf-8"),
+                    "name": att.get("filename", "attachment.pdf"),
+                })
+            except Exception as e:
+                print(f"⚠️ Attachment encode failed: {e}")
+
+    # ----- Call Brevo API -----
     try:
-        # Build MIME
-        msg = MIMEMultipart("mixed")
-        msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
-        msg["To"] = to_email
-        msg["Subject"] = subject
+        response = requests.post(
+            BREVO_API_URL,
+            headers={
+                "accept": "application/json",
+                "api-key": BREVO_API_KEY,
+                "content-type": "application/json",
+            },
+            json=payload,
+            timeout=20,
+        )
 
-        # Body: alternative text + html
-        alt = MIMEMultipart("alternative")
-        if text_body:
-            alt.attach(MIMEText(text_body, "plain", "utf-8"))
-        alt.attach(MIMEText(html_body, "html", "utf-8"))
-        msg.attach(alt)
+        if response.status_code in (200, 201, 202):
+            print(f"✅ Email sent via Brevo to {to_email}")
+            result["success"] = True
 
-        # Attachments
-        if attachments:
-            for att in attachments:
-                part = MIMEApplication(att["data"], _subtype=att.get("subtype", "pdf"))
-                part.add_header(
-                    "Content-Disposition",
-                    "attachment",
-                    filename=att.get("filename", "attachment.pdf"),
-                )
-                msg.attach(part)
-
-        # Connect
-        if SMTP_USE_SSL:
-            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20)
+            if log is not None:
+                log.status = "sent"
+                log.sent_at = datetime.now()
+                db.commit()
         else:
-            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
-            server.ehlo()
-            if SMTP_USE_TLS:
-                server.starttls()
-                server.ehlo()
+            err = f"Brevo {response.status_code}: {response.text[:300]}"
+            print(f"❌ {err}")
+            result["error"] = err
 
-        server.login(SMTP_USER, SMTP_PASS)
-        server.sendmail(SMTP_FROM_EMAIL, [to_email], msg.as_string())
-        server.quit()
+            if log is not None:
+                log.status = "failed"
+                log.error = err
+                db.commit()
 
-        print(f"Email sent to {to_email}")
-        result["success"] = True
-
+    except requests.exceptions.Timeout:
+        err = "Brevo request timed out"
+        print(f"❌ {err}")
+        result["error"] = err
         if log is not None:
-            log.status = "sent"
-            log.sent_at = datetime.now()
+            log.status = "failed"
+            log.error = err
             db.commit()
 
     except Exception as e:
-        err = str(e)
-        print(f"Email failed to {to_email}: {err}")
+        err = f"Email send failed: {e}"
+        print(f"❌ {err}")
         result["error"] = err
         if log is not None:
             log.status = "failed"

@@ -14,9 +14,9 @@ from dotenv import load_dotenv
 from app.database import get_db
 from app.models import User, Booking, Review, Notification
 from app.schemas import (
-    UserCreate, 
-    LoginRequest, 
-    LoginResponse, 
+    UserCreate,
+    LoginRequest,
+    LoginResponse,
     UserResponse,
     Token,
     TokenData,
@@ -26,6 +26,9 @@ from app.schemas import (
 )
 from app.security import hash_password, verify_password
 from app.config import config
+
+# ✅ Email service (Brevo)
+from app.services.email_service import send_email, render_template
 
 load_dotenv()
 
@@ -38,6 +41,9 @@ router = APIRouter()
 SECRET_KEY = config.SECRET_KEY
 ALGORITHM = config.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = config.ACCESS_TOKEN_EXPIRE_MINUTES
+
+# ✅ Frontend URL for reset links / welcome CTA
+FRONTEND_URL = os.getenv("APP_URL", "https://apnamate.vercel.app")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -78,11 +84,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
-    
+
     return user
 
 def get_current_admin_user(current_user: User = Depends(get_current_user)):
@@ -115,7 +121,7 @@ def register(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
-        
+
         # Hash the password
         hashed_password = hash_password(user.password)
 
@@ -125,15 +131,15 @@ def register(
             email=user.email,
             password=hashed_password,
             role=user.role,
-            is_active=1,  # Active by default
-            
+            is_active=1,
+
             # Provider details (optional fields)
             service=user.service,
             location=user.location,
             experience=user.experience,
             price=user.price,
             category=user.category,
-            rating="New",  # Default rating for new providers
+            rating="New",
             created_at=datetime.now()
         )
 
@@ -142,22 +148,42 @@ def register(
         db.refresh(new_user)
 
         # Create welcome notification
-        notification = Notification(
-            user_id=new_user.id,
-            title="Welcome to ApnaMate! 🎉",
-            message=f"Welcome {new_user.name}! Start exploring services and book your first service today.",
-            type="welcome",
-            created_at=datetime.now()
-        )
-        db.add(notification)
-        db.commit()
-
-        # Send welcome email (try, but don't fail if email fails)
         try:
-            from app.email_service import send_welcome_email
-            send_welcome_email(new_user.email, new_user.name)
+            notification = Notification(
+                user_id=new_user.id,
+                title="Welcome to ApnaMate! 🎉",
+                message=f"Welcome {new_user.name}! Start exploring services and book your first service today.",
+                type="welcome",
+                created_at=datetime.now()
+            )
+            db.add(notification)
+            db.commit()
         except Exception as e:
-            print(f"⚠️ Welcome email failed: {e}")
+            print(f"⚠️ Welcome notification failed (registration OK): {e}")
+
+        # ✅ Send welcome email via Brevo
+        try:
+            first_name = (new_user.name or "there").split(" ")[0]
+            html = render_template(
+                "welcome.html",
+                name=first_name,
+                app_url=FRONTEND_URL,
+                subject="Welcome to ApnaMate",
+            )
+            send_email(
+                to_email=new_user.email,
+                subject=f"Welcome to ApnaMate, {first_name}! 🎉",
+                html_body=html,
+                text_body=(
+                    f"Welcome to ApnaMate, {new_user.name}!\n\n"
+                    f"Your account is ready. Book your first service at "
+                    f"{FRONTEND_URL}/services"
+                ),
+                db=db,
+                template="welcome",
+            )
+        except Exception as e:
+            print(f"⚠️ Welcome email failed (registration OK): {e}")
 
         return {
             "success": True,
@@ -166,7 +192,7 @@ def register(
             "email": new_user.email,
             "role": new_user.role
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -183,7 +209,6 @@ def login(
 ):
     """Login user"""
     try:
-        # Find user by email
         user = db.query(User).filter(
             User.email == credentials.email
         ).first()
@@ -194,21 +219,19 @@ def login(
                 detail="Invalid email or password"
             )
 
-        # Check if account is active
         is_blocked = False
         if hasattr(user, 'is_active'):
             if isinstance(user.is_active, bool):
                 is_blocked = not user.is_active
-            else:  # integer case
+            else:
                 is_blocked = user.is_active == 0
-        
+
         if is_blocked:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Your account has been blocked by admin"
             )
 
-        # Verify password
         try:
             if not verify_password(credentials.password, user.password):
                 raise HTTPException(
@@ -222,12 +245,10 @@ def login(
                 detail="Invalid email or password"
             )
 
-        # Create access token
         access_token = create_access_token(
             data={"sub": str(user.id), "role": user.role}
         )
 
-        # Login successful
         return LoginResponse(
             success=True,
             message="Login successful",
@@ -238,7 +259,7 @@ def login(
             is_active=user.is_active if hasattr(user, 'is_active') else 1,
             token=access_token
         )
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -252,7 +273,6 @@ def get_current_user_info(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get current user details"""
     try:
         return UserResponse(
             id=current_user.id,
@@ -279,7 +299,6 @@ def get_user_by_id(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get user by ID"""
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -287,7 +306,7 @@ def get_user_by_id(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         return {
             "success": True,
             "user": {
@@ -321,23 +340,18 @@ def get_all_providers(
     search: Optional[str] = None,
     min_rating: Optional[float] = None
 ):
-    """Get all providers with advanced filters"""
     try:
         query = db.query(User).filter(
             User.role == "provider",
             User.is_active == 1
         )
-        
-        # Apply filters
+
         if service:
             query = query.filter(User.service.ilike(f"%{service}%"))
-        
         if location:
             query = query.filter(User.location.ilike(f"%{location}%"))
-        
         if category:
             query = query.filter(User.category.ilike(f"%{category}%"))
-        
         if search:
             query = query.filter(
                 or_(
@@ -347,30 +361,26 @@ def get_all_providers(
                     User.category.ilike(f"%{search}%")
                 )
             )
-        
+
         providers = query.all()
-        
-        # Format response with ratings
+
         providers_list = []
         for p in providers:
-            # Get average rating from reviews
             avg_rating_result = db.query(func.avg(Review.rating)).filter(
                 Review.provider_id == p.id
             ).first()
-            
+
             avg_rating = avg_rating_result[0] if avg_rating_result and avg_rating_result[0] else 0
             avg_rating = round(float(avg_rating), 1) if avg_rating else 0
-            
-            # Apply min rating filter
+
             if min_rating and avg_rating < min_rating:
                 continue
-            
-            # Get total bookings count
+
             total_bookings = db.query(Booking).filter(
                 Booking.provider_id == p.id,
                 Booking.status != 'Cancelled'
             ).count()
-            
+
             providers_list.append({
                 "id": p.id,
                 "name": p.name,
@@ -383,13 +393,13 @@ def get_all_providers(
                 "total_bookings": total_bookings,
                 "is_active": p.is_active
             })
-        
+
         return {
             "success": True,
             "count": len(providers_list),
             "providers": providers_list
         }
-    
+
     except Exception as e:
         print(f"Error in providers endpoint: {str(e)}")
         raise HTTPException(
@@ -402,36 +412,33 @@ def get_provider_details(
     provider_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get provider details by ID"""
     try:
         provider = db.query(User).filter(
             User.id == provider_id,
             User.role == "provider",
             User.is_active == 1
         ).first()
-        
+
         if not provider:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Provider not found"
             )
-        
-        # Get provider's bookings
+
         total_bookings = db.query(Booking).filter(
             Booking.provider_id == provider_id,
             Booking.status != 'Cancelled'
         ).count()
-        
-        # Get provider's reviews
+
         reviews = db.query(Review).filter(
             Review.provider_id == provider_id
         ).all()
-        
+
         avg_rating = 0
         if reviews:
             total_rating = sum(r.rating for r in reviews)
             avg_rating = total_rating / len(reviews)
-        
+
         return {
             "success": True,
             "provider": {
@@ -449,7 +456,7 @@ def get_provider_details(
                 "average_rating": round(avg_rating, 1) if avg_rating > 0 else "New"
             }
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -465,39 +472,35 @@ def update_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update user details"""
     try:
-        # Check if user is updating their own profile or is admin
         if current_user.id != user_id and current_user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to update this user"
             )
-        
+
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
-        # Update fields
+
         allowed_fields = ["name", "service", "location", "experience", "price", "category"]
         for field in allowed_fields:
             if field in user_update:
                 setattr(user, field, user_update[field])
-        
-        # Only admin can update role and is_active
+
         if current_user.role == "admin":
             if "role" in user_update:
                 user.role = user_update["role"]
             if "is_active" in user_update:
                 user.is_active = 1 if user_update["is_active"] else 0
-        
+
         user.updated_at = datetime.now()
         db.commit()
         db.refresh(user)
-        
+
         return {
             "success": True,
             "message": "User updated successfully",
@@ -511,7 +514,7 @@ def update_user(
                 "is_active": user.is_active
             }
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -527,31 +530,29 @@ def delete_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete user (soft delete)"""
     try:
-        # Only admin can delete users
         if current_user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only admin can delete users"
             )
-        
+
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
-        user.is_active = 0  # Soft delete
+
+        user.is_active = 0
         user.updated_at = datetime.now()
         db.commit()
-        
+
         return {
             "success": True,
             "message": f"User {user.email} has been deactivated"
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -566,16 +567,15 @@ def get_all_users(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all users (admin only)"""
     try:
         if current_user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only admin can view all users"
             )
-        
+
         users = db.query(User).all()
-        
+
         return {
             "success": True,
             "count": len(users),
@@ -592,7 +592,7 @@ def get_all_users(
                 for u in users
             ]
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -607,7 +607,6 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Change user password"""
     try:
         user = db.query(User).filter(User.id == current_user.id).first()
         if not user:
@@ -615,24 +614,22 @@ def change_password(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
-        # Verify current password
+
         if not verify_password(password_data.current_password, user.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Current password is incorrect"
             )
-        
-        # Update password
+
         user.password = hash_password(password_data.new_password)
         user.updated_at = datetime.now()
         db.commit()
-        
+
         return {
             "success": True,
             "message": "Password changed successfully"
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -651,61 +648,108 @@ def forgot_password(
     request: PasswordResetRequest,
     db: Session = Depends(get_db)
 ):
-    """Request password reset - sends email with reset link"""
+    """Request password reset - sends email via Brevo"""
     try:
         user = db.query(User).filter(User.email == request.email).first()
         if not user:
-            # Don't reveal if user exists or not (security best practice)
             return {
                 "success": True,
                 "message": "If your email is registered, you will receive a password reset link"
             }
-        
-        # Create password reset token (expires in 1 hour)
+
         reset_token = create_access_token(
             data={"sub": str(user.id), "reset": True},
             expires_delta=timedelta(hours=1)
         )
-        
-        # Try to send email with reset link
+
+        reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
+
+        # ✅ Send reset email via Brevo
         try:
-            from app.email_service import send_password_reset_email
-            email_sent = send_password_reset_email(
+            first_name = (user.name or "there").split(" ")[0]
+            html = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>Reset your password</title></head>
+<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,Helvetica,sans-serif;color:#334155;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f7fb;padding:24px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#2563eb,#1e40af);padding:28px;text-align:center;">
+            <div style="color:white;font-size:24px;font-weight:bold;">🔧 ApnaMate</div>
+            <div style="color:#dbeafe;font-size:13px;margin-top:6px;">Password Reset Request</div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            <h2 style="margin:0 0 16px;color:#0f172a;font-size:20px;">Reset your password</h2>
+            <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Hi <b>{first_name}</b>,</p>
+            <p style="font-size:15px;line-height:1.6;margin:0 0 24px;">
+              We received a request to reset your ApnaMate password. Click the button below to set a new password. This link expires in <b>1 hour</b>.
+            </p>
+            <div style="text-align:center;margin:28px 0;">
+              <a href="{reset_link}"
+                 style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#2563eb,#1e40af);color:white;text-decoration:none;font-weight:bold;font-size:15px;border-radius:10px;">
+                🔐 Reset Password
+              </a>
+            </div>
+            <p style="font-size:13px;color:#64748b;margin:20px 0 0;">
+              Or copy this link into your browser:<br/>
+              <span style="word-break:break-all;color:#2563eb;">{reset_link}</span>
+            </p>
+            <p style="font-size:14px;line-height:1.6;margin:24px 0 0;color:#475569;">
+              If you didn't request this, you can safely ignore this email — your password won't change.
+            </p>
+            <p style="font-size:14px;margin:24px 0 0;">
+              Cheers,<br/><b>Team ApnaMate</b>
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f8fafc;padding:18px 32px;text-align:center;font-size:12px;color:#64748b;">
+            ApnaMate · Secure password reset
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+            result = send_email(
                 to_email=user.email,
-                reset_token=reset_token,
-                user_name=user.name
+                subject="Reset your ApnaMate password 🔐",
+                html_body=html,
+                text_body=(
+                    f"Hi {first_name},\n\n"
+                    f"Reset your ApnaMate password here: {reset_link}\n\n"
+                    f"Link expires in 1 hour."
+                ),
+                db=db,
+                template="password_reset",
             )
-            
-            if email_sent:
+
+            if result["success"]:
                 print(f"✅ Password reset email sent to {user.email}")
                 return {
                     "success": True,
                     "message": "Password reset link sent to your email! 📧"
                 }
             else:
-                # Email failed - log but still return success
-                print(f"⚠️ Failed to send password reset email to {user.email}")
+                print(f"⚠️ Failed to send reset email: {result.get('error')}")
                 return {
                     "success": True,
                     "message": "If your email is registered, you will receive a password reset link"
                 }
-                
-        except ImportError:
-            # Email service not configured - return token for development
-            print(f"⚠️ Email service not configured. Returning token for development.")
-            return {
-                "success": True,
-                "message": "Password reset link (Development Mode)",
-                "reset_token": reset_token,
-                "reset_link": f"http://localhost:5173/reset-password?token={reset_token}"
-            }
+
         except Exception as e:
             print(f"❌ Email error: {str(e)}")
             return {
                 "success": True,
                 "message": "If your email is registered, you will receive a password reset link"
             }
-        
+
     except Exception as e:
         print(f"❌ Error in forgot-password: {str(e)}")
         raise HTTPException(
@@ -718,9 +762,7 @@ def reset_password(
     reset_data: PasswordResetConfirm,
     db: Session = Depends(get_db)
 ):
-    """Reset password with token"""
     try:
-        # Decode and verify token
         try:
             payload = jwt.decode(reset_data.token, SECRET_KEY, algorithms=[ALGORITHM])
             user_id = payload.get("sub")
@@ -731,40 +773,37 @@ def reset_password(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired reset token. Please request a new password reset."
             )
-        
+
         if not is_reset:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid reset token. Please request a new password reset."
             )
-        
-        # Find user
+
         user = db.query(User).filter(User.id == int(user_id)).first()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
-        # Validate new password
+
         if len(reset_data.new_password) < 6:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Password must be at least 6 characters long"
             )
-        
-        # Update password
+
         user.password = hash_password(reset_data.new_password)
         user.updated_at = datetime.now()
         db.commit()
-        
+
         print(f"✅ Password reset successful for user: {user.email}")
-        
+
         return {
             "success": True,
             "message": "Password reset successfully! You can now login with your new password."
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -779,13 +818,11 @@ def reset_password(
 # ADMIN USER MANAGEMENT ENDPOINTS
 # =========================================================
 
-# ✅ NEW: Get all users with roles (Admin only)
 @router.get("/admin/users/roles")
 def get_all_user_roles(
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Get all users with their roles (Admin only)"""
     try:
         users = db.query(User).all()
         return {
@@ -809,7 +846,6 @@ def get_all_user_roles(
             detail=f"Error fetching users: {str(e)}"
         )
 
-# ✅ NEW: Update user role (Admin only)
 @router.put("/admin/users/{user_id}/role")
 def update_user_role(
     user_id: int,
@@ -817,7 +853,6 @@ def update_user_role(
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Update user role (Admin only)"""
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -825,26 +860,25 @@ def update_user_role(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         new_role = role_update.get("role")
         if new_role not in ["admin", "provider", "customer"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid role. Must be: admin, provider, or customer"
             )
-        
-        # Prevent admin from changing their own role
+
         if user.id == current_admin.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You cannot change your own role"
             )
-        
+
         user.role = new_role
         user.updated_at = datetime.now()
         db.commit()
         db.refresh(user)
-        
+
         return {
             "success": True,
             "message": f"User {user.name}'s role updated to {new_role}",
@@ -870,7 +904,6 @@ def block_user_admin(
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Block a user (Admin only)"""
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -878,17 +911,17 @@ def block_user_admin(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         if user.role == "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot block another admin"
             )
-        
+
         user.is_active = 0
         user.updated_at = datetime.now()
         db.commit()
-        
+
         return {
             "success": True,
             "message": f"User {user.name} has been blocked"
@@ -908,7 +941,6 @@ def unblock_user_admin(
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Unblock a user (Admin only)"""
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -916,11 +948,11 @@ def unblock_user_admin(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         user.is_active = 1
         user.updated_at = datetime.now()
         db.commit()
-        
+
         return {
             "success": True,
             "message": f"User {user.name} has been unblocked"
@@ -940,7 +972,6 @@ def delete_user_admin(
     current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a user (Admin only)"""
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -948,16 +979,16 @@ def delete_user_admin(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         if user.role == "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot delete another admin"
             )
-        
+
         db.delete(user)
         db.commit()
-        
+
         return {
             "success": True,
             "message": f"User {user.name} has been deleted"
@@ -977,7 +1008,7 @@ def delete_user_admin(
 
 @router.get("/debug-providers")
 def debug_providers(db: Session = Depends(get_db)):
-    """Debug endpoint to check providers (remove in production)"""
+    """Debug endpoint (remove in production)"""
     try:
         providers = db.query(User).filter(User.role == "provider").all()
         return {
