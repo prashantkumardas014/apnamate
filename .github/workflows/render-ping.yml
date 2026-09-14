@@ -2,21 +2,23 @@ name: Keep Render Backend Warm
 
 on:
   schedule:
-    # Runs every 14 minutes (GitHub's minimum is 5 min)
     - cron: '*/14 * * * *'
-  workflow_dispatch: # allows manual trigger from Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Ping Render backend
         run: |
           echo "Pinging at $(date)"
           curl -s -o /dev/null -w "HTTP %{http_code}\n" \
             https://apnamate-backend-2026.onrender.com/health
 
-      - name: Keep workflow alive
+      - name: Keep this workflow alive
         uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          use_api: true
