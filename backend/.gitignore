@@ -24,3 +24,8 @@ uploads/
 # IDE
 .vscode/
 .idea/
+
+# Local diagnostic scripts
+backend/check_users.py
+backend/list_users.py
+backend/check_tables.py
