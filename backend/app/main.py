@@ -83,17 +83,10 @@ app = FastAPI(
 # =========================================================
 # CORS CONFIGURATION — bulletproof for dev + production
 # =========================================================
-# Priority:
-#   1. If CORS_ORIGINS env var is set, use those exact origins
-#   2. Otherwise allow any *.vercel.app and localhost (regex)
-#
-# NOTE: When CORS_ORIGINS="*" is set, we MUST use allow_credentials=False
-#       because browsers reject wildcard origins with credentials.
 
 _raw_origins = os.getenv("CORS_ORIGINS", "").strip()
 
 if _raw_origins == "*":
-    # Wildcard mode — no credentials (required by browsers)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -106,7 +99,6 @@ if _raw_origins == "*":
     print("🌐 CORS: ALLOWING ALL ORIGINS (*) — lock down before public launch")
 
 elif _raw_origins:
-    # Explicit list mode
     _origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
@@ -120,7 +112,6 @@ elif _raw_origins:
     print(f"🌐 CORS: allowing {len(_origins)} explicit origins")
 
 else:
-    # Default mode — localhost list + any *.vercel.app via regex
     _origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -143,7 +134,7 @@ else:
         expose_headers=["*"],
         max_age=3600,
     )
-    print(f"🌐 CORS: localhost + any *.vercel.app (default mode)")
+    print("🌐 CORS: localhost + any *.vercel.app (default mode)")
 
 # =========================================================
 # STATIC FILES
@@ -268,6 +259,75 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # =========================================================
+# ADMIN BOOTSTRAP HELPER
+# =========================================================
+
+def _bootstrap_admin():
+    """
+    Ensure an admin account exists.
+    Reads ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME from env.
+    Promotes existing user if email already exists.
+    Idempotent — safe to run on every startup.
+    """
+    admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+    admin_name = os.getenv("ADMIN_NAME", "Admin").strip() or "Admin"
+
+    if not admin_email or not admin_password:
+        print("ℹ️  ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping admin bootstrap")
+        return
+
+    try:
+        from app.database import SessionLocal
+        from app.models import User
+
+        # Try common password-hasher names
+        try:
+            from app.auth import hash_password
+        except ImportError:
+            try:
+                from app.auth import get_password_hash as hash_password
+            except ImportError:
+                print("⚠️  Could not find password hasher in app.auth — skipping admin bootstrap")
+                return
+
+        db = SessionLocal()
+
+        existing_admin = db.query(User).filter(User.role == "admin").first()
+        if existing_admin:
+            print(f"ℹ️  Admin already exists: {existing_admin.email} — skipping bootstrap")
+            db.close()
+            return
+
+        existing_user = db.query(User).filter(User.email == admin_email).first()
+
+        if existing_user:
+            existing_user.role = "admin"
+            existing_user.is_active = 1
+            existing_user.updated_at = datetime.now()
+            db.commit()
+            print(f"✅ Promoted existing user to admin: {admin_email}")
+        else:
+            admin = User(
+                name=admin_name,
+                email=admin_email,
+                password=hash_password(admin_password),
+                role="admin",
+                is_active=1,
+                created_at=datetime.now(),
+            )
+            db.add(admin)
+            db.commit()
+            print(f"✅ Admin created on startup: {admin_email}")
+
+        db.close()
+
+    except Exception as e:
+        print(f"⚠️  Admin bootstrap failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+# =========================================================
 # STARTUP EVENT
 # =========================================================
 
@@ -286,6 +346,11 @@ async def startup_event():
     print("=" * 60)
     print("📧 Email:", "✅ configured" if smtp_ready else "⚠️  not configured")
     print("📱 SMS  :", "✅ configured" if sms_ready else "⚠️  not configured")
+    print("=" * 60)
+
+    # ✅ Auto-create/promote admin on startup
+    _bootstrap_admin()
+
     print("=" * 60)
     print("✅ Server is ready to accept connections!")
 
