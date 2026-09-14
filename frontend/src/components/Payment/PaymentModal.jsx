@@ -23,31 +23,24 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
   const FALLBACK_UPI_PHONE = '7069112526';
 
   // ==============================
-  // GET AMOUNT — quote only (NO 500 fallback!)
+  // GET AMOUNT — quote only
   // ==============================
   const getAmount = () => {
-    // Priority 1: quoted_amount (source of truth for pending payments)
     if (booking?.quoted_amount !== undefined && booking?.quoted_amount !== null) {
       const q = Number(booking.quoted_amount);
       if (!isNaN(q) && q > 0) return Math.round(q);
     }
-    // Priority 2: paid_amount (for records where payment already cleared)
     if (booking?.paid_amount !== undefined && booking?.paid_amount !== null) {
       const p = Number(booking.paid_amount);
       if (!isNaN(p) && p > 0) return Math.round(p);
     }
-    // Priority 3: legacy `price` string
     if (booking?.price) {
       const num = parseInt(String(booking.price).replace(/[^0-9]/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    // ✅ NO 500 fallback. Return 0 so hasQuote() fails safely.
     return 0;
   };
 
-  // ==============================
-  // IS PAYMENT ALLOWED?
-  // ==============================
   const hasQuote = () => {
     const amt = getAmount();
     return Number.isFinite(amt) && amt > 0;
@@ -118,7 +111,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
 
       const amount = getAmount();
 
-      // ✅ Guard: refuse to send a 0 or invalid amount
       if (!hasQuote() || amount <= 0) {
         throw new Error(
           'No payable amount found for this booking. The quote may have changed — please refresh and try again.'
@@ -134,7 +126,7 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
         body: JSON.stringify({
           booking_id: booking.id,
           gateway: selectedGateway,
-          amount: Number(amount),          // ✅ exact integer, no drift
+          amount: Number(amount),
           currency: 'INR',
         }),
       });
@@ -145,7 +137,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
         throw new Error(data.detail || 'Failed to initialize payment');
       }
 
-      // ✅ Sanity check: backend echoed amount must match what we sent
       if (data.amount !== undefined && Number(data.amount) !== Number(amount)) {
         throw new Error(
           `Server returned ₹${data.amount} but expected ₹${amount}. Please refresh and try again.`
@@ -210,7 +201,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
         throw new Error('Invalid payment amount. Please restart the payment flow.');
       }
 
-      // 1. Tell backend the customer claims to have paid
       const response = await fetch(`${API_BASE_URL}/bookings/payments/verify`, {
         method: 'POST',
         headers: {
@@ -231,7 +221,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
         throw new Error(data.detail || 'Failed to submit payment');
       }
 
-      // 2. Upload screenshot if provided
       const resolvedPaymentId = data.payment_id || upiDetails?.payment_id;
       if (screenshotFile && resolvedPaymentId) {
         const fd = new FormData();
@@ -249,7 +238,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
 
       setSubmitted(true);
 
-      // 3. Open WhatsApp with prefilled message
       const phone = upiDetails?.upi_phone || FALLBACK_UPI_PHONE;
       const waText = encodeURIComponent(
         `Hi, I paid ₹${amount} for booking #${booking.id}. UTR: ${utrNumber.trim()}. Screenshot attached.`
@@ -271,7 +259,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
           `You'll be notified once approved.`
       );
 
-      // ✅ UPI needs admin approval — use onPendingVerification
       if (onPendingVerification) {
         onPendingVerification({ ...data, amount, utr: utrNumber.trim() });
       } else if (onSuccess) {
@@ -321,7 +308,7 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
   };
 
   // ==============================
-  // VERIFY RAZORPAY (auto-confirm)
+  // VERIFY RAZORPAY
   // ==============================
   const verifyPayment = async (gateway, response) => {
     try {
@@ -349,7 +336,6 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
         throw new Error(data.detail || 'Payment verification failed');
       }
 
-      // Razorpay is auto-verified — this is a real success
       if (onSuccess) onSuccess(data);
       onClose();
     } catch (err) {
@@ -357,6 +343,74 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
       setLoading(false);
     }
   };
+
+  // ==============================
+  // REUSABLE: UPI DETAIL ROW (fixes vertical wrap)
+  // ==============================
+  const UpiDetailRow = ({ label, value, type }) => (
+    <div className="upi-detail-item" style={{ marginBottom: 12 }}>
+      <label
+        style={{
+          display: 'block',
+          fontSize: 12,
+          fontWeight: 700,
+          color: '#475569',
+          marginBottom: 6,
+          letterSpacing: '0.02em',
+        }}
+      >
+        {label}
+      </label>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '10px 12px',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}
+      >
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 14,
+            fontWeight: 700,
+            color: '#0f172a',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            fontFamily: 'monospace',
+          }}
+        >
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={() => copyToClipboard(value, type)}
+          disabled={loading}
+          style={{
+            flexShrink: 0,
+            padding: '6px 14px',
+            background: copied === type ? '#16a34a' : '#2563eb',
+            color: 'white',
+            border: 'none',
+            borderRadius: 6,
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {copied === type ? '✅ Copied' : '📋 Copy'}
+        </button>
+      </div>
+    </div>
+  );
 
   // ==============================
   // RENDER UPI
@@ -401,40 +455,42 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
         )}
 
         <div className="upi-details">
-          <div className="upi-detail-item">
-            <label>UPI ID</label>
-            <div className="upi-value-row">
-              <span className="upi-value">{upiDetails?.upi_id || FALLBACK_UPI_ID}</span>
-              <button
-                className="copy-btn"
-                onClick={() => copyToClipboard(upiDetails?.upi_id || FALLBACK_UPI_ID, 'upi')}
-                disabled={loading}
-              >
-                {copied === 'upi' ? '✅' : '📋'} Copy
-              </button>
-            </div>
-          </div>
+          <UpiDetailRow
+            label="UPI ID"
+            value={upiDetails?.upi_id || FALLBACK_UPI_ID}
+            type="upi"
+          />
+          <UpiDetailRow
+            label="WhatsApp (for screenshot)"
+            value={upiDetails?.upi_phone || FALLBACK_UPI_PHONE}
+            type="phone"
+          />
 
           <div className="upi-detail-item">
-            <label>WhatsApp (for screenshot)</label>
-            <div className="upi-value-row">
-              <span className="upi-value">{upiDetails?.upi_phone || FALLBACK_UPI_PHONE}</span>
-              <button
-                className="copy-btn"
-                onClick={() => copyToClipboard(upiDetails?.upi_phone || FALLBACK_UPI_PHONE, 'phone')}
-                disabled={loading}
-              >
-                {copied === 'phone' ? '✅' : '📋'} Copy
-              </button>
-            </div>
-          </div>
-
-          <div className="upi-detail-item">
-            <label>Amount to Pay</label>
-            <div className="upi-value-row">
-              <span className="upi-value amount" style={{ fontSize: 22, fontWeight: 'bold', color: '#16a34a' }}>
-                ₹{getAmount()}
-              </span>
+            <label
+              style={{
+                display: 'block',
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#475569',
+                marginBottom: 6,
+                letterSpacing: '0.02em',
+              }}
+            >
+              Amount to Pay
+            </label>
+            <div
+              style={{
+                padding: '12px 14px',
+                background: '#f0fdf4',
+                border: '1px solid #86efac',
+                borderRadius: 8,
+                fontSize: 22,
+                fontWeight: 800,
+                color: '#16a34a',
+              }}
+            >
+              ₹{getAmount()}
             </div>
           </div>
         </div>
@@ -454,7 +510,15 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
           </h4>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 'bold', marginBottom: 6, color: '#0c4a6e' }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: 13,
+                fontWeight: 'bold',
+                marginBottom: 6,
+                color: '#0c4a6e',
+              }}
+            >
               UTR / Transaction ID <span style={{ color: '#dc2626' }}>*</span>
             </label>
             <input
@@ -478,7 +542,15 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 'bold', marginBottom: 6, color: '#0c4a6e' }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: 13,
+                fontWeight: 'bold',
+                marginBottom: 6,
+                color: '#0c4a6e',
+              }}
+            >
               Payment Screenshot (optional)
             </label>
             <input
@@ -567,7 +639,9 @@ const PaymentModal = ({ booking, onClose, onSuccess, onPendingVerification }) =>
     <div className="cod-section">
       <div className="cod-info">
         <h3>💰 Cash on Delivery</h3>
-        <p>Pay <strong>₹{getAmount()}</strong> in cash when the service is completed.</p>
+        <p>
+          Pay <strong>₹{getAmount()}</strong> in cash when the service is completed.
+        </p>
         <p className="cod-note">The provider will collect payment directly from you.</p>
       </div>
 
