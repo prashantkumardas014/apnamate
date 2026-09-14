@@ -25,11 +25,9 @@ function ProviderDashboard() {
   const [myUpi, setMyUpi] = useState("");
   const [savingUpi, setSavingUpi] = useState(false);
 
-  // ✅ NEW: reviews state
   const [reviews, setReviews] = useState([]);
   const [avgRating, setAvgRating] = useState(0);
 
-  // track which booking's receipt is downloading
   const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
 
   // =========================================================
@@ -68,7 +66,7 @@ function ProviderDashboard() {
       fetchProfile(parsedUser.id);
       fetchNotificationCount(parsedUser.id);
       fetchPayouts();
-      fetchReviews(parsedUser.id); // ✅ NEW
+      fetchReviews(parsedUser.id);
     } catch (error) {
       console.error("Error parsing user:", error);
       localStorage.removeItem("user");
@@ -101,7 +99,7 @@ function ProviderDashboard() {
   };
 
   // =========================================================
-  // ✅ NEW: REVIEWS
+  // REVIEWS
   // =========================================================
   const fetchReviews = async (providerId) => {
     if (!providerId) return;
@@ -207,7 +205,7 @@ function ProviderDashboard() {
   };
 
   // =========================================================
-  // ✅ DOWNLOAD RECEIPT (PDF) — with auto-backfill retry
+  // DOWNLOAD RECEIPT (PDF)
   // =========================================================
   const downloadReceipt = async (bookingId) => {
     setDownloadingReceiptId(bookingId);
@@ -219,7 +217,6 @@ function ProviderDashboard() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // If missing, trigger auto-backfill and retry once
       if (infoRes.status === 404) {
         try {
           await fetch(`${API_BASE_URL}/bookings/payments/bills/all`, {
@@ -460,39 +457,70 @@ function ProviderDashboard() {
   };
 
   // =========================================================
-  // UPDATE BOOKING STATUS
+  // ✅ FIXED: MARK COMPLETED / CANCEL
   // =========================================================
-  const updateBookingStatus = async (bookingId, action) => {
-    let newStatus;
-    if (action === "complete") newStatus = "completed";
-    else if (action === "cancel") newStatus = "cancelled";
-    else newStatus = action;
-
-    if (action === "cancel" && !window.confirm("Cancel this booking?")) return;
-    if (action === "complete" && !window.confirm("Mark this job as completed?")) return;
+  // Completed uses PATCH /bookings/{id}/complete
+  // Cancelled uses DELETE /bookings/{id}
+  // =========================================================
+  const markCompleted = async (bookingId) => {
+    if (!window.confirm("Mark this job as completed?")) return;
 
     try {
-      showMessage("Updating booking...", "info");
+      showMessage("Marking as completed...", "info");
+
       const response = await fetch(
-        `${API_BASE_URL}/bookings/${bookingId}`,
+        `${API_BASE_URL}/bookings/${bookingId}/complete`,
         {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", ...authHeader() },
-          body: JSON.stringify({ status: newStatus }),
+          method: "PATCH",
+          headers: authHeader(), // no body needed
         }
       );
+
       const data = await response.json();
+
       if (!response.ok) {
-        showMessage(data.detail || "Unable to update booking", "error");
+        showMessage(data.detail || "Unable to complete booking", "error");
         return;
       }
-      showMessage("✅ Booking updated", "success");
+
+      showMessage("✅ Booking marked as completed", "success");
       fetchBookings(user.id);
       fetchNotificationCount(user.id);
       fetchPayouts();
     } catch (error) {
-      console.error("Booking status error:", error);
-      showMessage("Unable to update booking", "error");
+      console.error("Complete booking error:", error);
+      showMessage("Unable to complete booking", "error");
+    }
+  };
+
+  const cancelBooking = async (bookingId) => {
+    if (!window.confirm("Cancel this booking?")) return;
+
+    try {
+      showMessage("Cancelling booking...", "info");
+
+      const response = await fetch(
+        `${API_BASE_URL}/bookings/${bookingId}`,
+        {
+          method: "DELETE",
+          headers: authHeader(),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        showMessage(data.detail || "Unable to cancel booking", "error");
+        return;
+      }
+
+      showMessage("✅ Booking cancelled", "success");
+      fetchBookings(user.id);
+      fetchNotificationCount(user.id);
+      fetchPayouts();
+    } catch (error) {
+      console.error("Cancel booking error:", error);
+      showMessage("Unable to cancel booking", "error");
     }
   };
 
@@ -513,7 +541,7 @@ function ProviderDashboard() {
     fetchProfile(user.id);
     fetchNotificationCount(user.id);
     fetchPayouts();
-    fetchReviews(user.id); // ✅ NEW
+    fetchReviews(user.id);
     showMessage("🔄 Data refreshed!", "success");
   };
 
@@ -687,7 +715,7 @@ function ProviderDashboard() {
         )}
       </div>
 
-      {/* ✅ NEW: REVIEWS */}
+      {/* REVIEWS */}
       <div style={{ maxWidth: "1100px", margin: "0 auto 25px", backgroundColor: "white", padding: "25px", borderRadius: "12px", boxShadow: "0 3px 12px rgba(0,0,0,0.08)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
           <h2 style={{ marginTop: 0, color: "#1e293b", marginBottom: 0 }}>⭐ Customer Reviews</h2>
@@ -932,11 +960,19 @@ function ProviderDashboard() {
 
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "15px", paddingTop: "15px", borderTop: "1px solid #e2e8f0" }}>
                   {(isPendingQuote(booking.status) || isAccepted(booking.status)) && (
-                    <button onClick={() => updateBookingStatus(booking.id, "cancel")} style={{ padding: "10px 18px", backgroundColor: "#6b7280", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>🚫 Cancel Booking</button>
+                    <button
+                      onClick={() => cancelBooking(booking.id)}
+                      style={{ padding: "10px 18px", backgroundColor: "#6b7280", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                    >
+                      🚫 Cancel Booking
+                    </button>
                   )}
 
                   {(paidNow || isAccepted(booking.status)) && !payPending && (
-                    <button onClick={() => updateBookingStatus(booking.id, "complete")} style={{ padding: "10px 18px", backgroundColor: "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
+                    <button
+                      onClick={() => markCompleted(booking.id)}
+                      style={{ padding: "10px 18px", backgroundColor: "#16a34a", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                    >
                       {paidNow ? "🎉 Mark as Completed" : "✅ Mark as Completed"}
                     </button>
                   )}
