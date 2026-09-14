@@ -1,34 +1,20 @@
-# backend/check_user.py
-import sqlite3
+# check_users.py
+import sys
+from sqlalchemy import create_engine, text
 
-conn = sqlite3.connect('apnamate.db')
-cursor = conn.cursor()
+if len(sys.argv) < 2:
+    print("Usage: python check_users.py <DATABASE_URL>")
+    sys.exit(1)
 
-# Check user 2
-cursor.execute('SELECT id, email, name, role, is_active FROM users WHERE id = 2')
-user = cursor.fetchone()
+engine = create_engine(sys.argv[1], connect_args={"sslmode": "require"})
 
-print("=" * 60)
-print("👤 USER DETAILS")
-print("=" * 60)
-if user:
-    print(f"ID: {user[0]}")
-    print(f"Email: {user[1]}")
-    print(f"Name: {user[2]}")
-    print(f"Role: {user[3]}")
-    print(f"Active: {user[4]}")
-    print("=" * 60)
-    
-    if user[3] != "customer":
-        print(f"❌ User role is '{user[3]}', should be 'customer'")
+with engine.connect() as conn:
+    result = conn.execute(text("SELECT id, name, email, role, is_active FROM users ORDER BY id"))
+    rows = result.fetchall()
+
+    if not rows:
+        print("? No users in the database yet.")
     else:
-        print("✅ User role is correct!")
-    
-    if user[4] == 0:
-        print("❌ User is BLOCKED!")
-    else:
-        print("✅ User is active!")
-else:
-    print("❌ User not found!")
-
-conn.close()
+        print(f"? Found {len(rows)} user(s):\n")
+        for r in rows:
+            print(f"  ID={r[0]}  name={r[1]}  email={r[2]}  role={r[3]}  active={r[4]}")
