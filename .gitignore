@@ -60,3 +60,4 @@ ApnaMate-Snapshot-*.zip
 .idea/
 .DS_Store
 Thumbs.db
+ApnaMate-Snapshot-*/
