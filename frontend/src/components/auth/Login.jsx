@@ -5,8 +5,8 @@ import "./Login.css";
 import { API_BASE_URL } from "../../config";
 
 function Login({ setUser }) {
-  const [email, setEmail] = useState("admin@apnamate.com");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -98,7 +98,6 @@ function Login({ setUser }) {
 
         console.log(`➡️ Redirecting to: ${redirectPath}`);
 
-        // Redirect after a short delay
         setTimeout(() => {
           window.location.href = redirectPath;
         }, 800);
@@ -133,9 +132,7 @@ function Login({ setUser }) {
     <div className="login-page">
       <div className="login-container">
         <form onSubmit={handleLogin} className="login-form">
-          {/* ============================== */}
           {/* HEADER WITH CENTERED LOGO */}
-          {/* ============================== */}
           <div className="login-header">
             <div className="logo">
               <img
@@ -163,6 +160,7 @@ function Login({ setUser }) {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
+              autoComplete="email"
               className={`form-input ${isLoading ? 'form-input-disabled' : ''}`}
             />
           </div>
@@ -180,6 +178,7 @@ function Login({ setUser }) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                autoComplete="current-password"
                 className={`form-input ${isLoading ? 'form-input-disabled' : ''}`}
               />
               <button
@@ -245,7 +244,6 @@ function Login({ setUser }) {
           </div>
 
           <div className="social-login">
-            {/* ✅ Phone + OTP */}
             <button
               type="button"
               className="social-btn phone"
