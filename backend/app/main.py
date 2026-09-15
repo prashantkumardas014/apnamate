@@ -261,16 +261,19 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # =========================================================
-# ADMIN BOOTSTRAP HELPER (FORCE-RESET VERSION)
+# ADMIN BOOTSTRAP HELPER (SAFE VERSION)
+# ---------------------------------------------------------
+# Only CREATES the admin if the email does not exist.
+# Never overwrites an existing password.
+# Idempotent — safe to run on every startup.
 # =========================================================
 
 def _bootstrap_admin():
     """
-    Ensure the configured admin exists and FORCE-RESET its password.
-
+    Ensure the configured admin account exists.
     Reads ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME from env.
-    Runs on every startup. Writes to Render's actual DB.
-    Remove the force-reset once login is verified working.
+    Creates the user only if the email is not already in the DB.
+    Does NOT touch the password of an existing user.
     """
     admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
     admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
@@ -285,11 +288,10 @@ def _bootstrap_admin():
         from app.models import User
 
         try:
-            from app.auth import hash_password, verify_password
+            from app.auth import hash_password
         except ImportError:
             try:
                 from app.auth import get_password_hash as hash_password
-                from app.auth import verify_password
             except ImportError:
                 print("⚠️  Could not find password hasher in app.auth — skipping admin bootstrap")
                 return
@@ -299,13 +301,7 @@ def _bootstrap_admin():
             user = db.query(User).filter(User.email == admin_email).first()
 
             if user:
-                user.password = hash_password(admin_password)
-                user.role = "admin"
-                user.is_active = 1
-                user.updated_at = datetime.now()
-                db.commit()
-                db.refresh(user)
-                print(f"🔧 FORCED admin password reset for: {admin_email} (id={user.id})")
+                print(f"ℹ️  Admin already exists: {admin_email} (id={user.id}) — skipping")
             else:
                 user = User(
                     name=admin_name,
@@ -318,12 +314,7 @@ def _bootstrap_admin():
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-                print(f"🔧 FORCED admin creation: {admin_email} (id={user.id})")
-
-            # Verify
-            ok = verify_password(admin_password, user.password)
-            print(f"🔧 Verification after bootstrap: {ok}")
-
+                print(f"✅ Admin created on startup: {admin_email} (id={user.id})")
         finally:
             db.close()
 
@@ -359,7 +350,7 @@ async def startup_event():
     print("📱 SMS  :", "✅ configured" if sms_ready else "⚠️  not configured")
     print("=" * 60)
 
-    # ✅ Force-reset admin on every startup
+    # ✅ Create admin only if missing — never resets existing password
     _bootstrap_admin()
 
     print("=" * 60)
