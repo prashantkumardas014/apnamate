@@ -209,15 +209,23 @@ def login(
 ):
     """Login user"""
     try:
+        # DEBUG: log what we received (mask password length only)
+        print(f"🔍 LOGIN attempt for email={credentials.email!r}, "
+              f"password_type={type(credentials.password).__name__}, "
+              f"password_len={len(credentials.password) if credentials.password else 0}")
+
         user = db.query(User).filter(
             User.email == credentials.email
         ).first()
 
         if not user:
+            print(f"❌ LOGIN: no user with email={credentials.email!r}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
+
+        print(f"✅ LOGIN: found user id={user.id}, role={user.role}")
 
         is_blocked = False
         if hasattr(user, 'is_active'):
@@ -232,18 +240,28 @@ def login(
                 detail="Your account has been blocked by admin"
             )
 
+        # ---- Password verification (FIXED) ----
+        # IMPORTANT: We separate "verify_password returned False" (expected, means bad password)
+        # from "verify_password threw an exception" (unexpected, real bug).
         try:
-            if not verify_password(credentials.password, user.password):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password"
-                )
+            password_ok = verify_password(credentials.password, user.password)
         except Exception as e:
-            print(f"Password verification error: {e}")
+            import traceback
+            print("🚨 VERIFY_PASSWORD THREW AN EXCEPTION:")
+            traceback.print_exc()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
+
+        if not password_ok:
+            print(f"❌ LOGIN: wrong password for user id={user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+
+        print(f"✅ LOGIN: password verified, issuing token for user id={user.id}")
 
         access_token = create_access_token(
             data={"sub": str(user.id), "role": user.role}
@@ -263,6 +281,9 @@ def login(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print("🚨 LOGIN unexpected error:")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
