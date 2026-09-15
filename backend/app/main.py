@@ -30,6 +30,8 @@ from app.config import config
 # DATABASE INITIALIZATION
 # =========================================================
 
+print(f"🗄️  ACTUAL DB URL: {engine.url}")
+
 try:
     models.Base.metadata.create_all(bind=engine)
     print("✅ Database tables created/verified successfully")
@@ -81,7 +83,7 @@ app = FastAPI(
 )
 
 # =========================================================
-# CORS CONFIGURATION — bulletproof for dev + production
+# CORS CONFIGURATION
 # =========================================================
 
 _raw_origins = os.getenv("CORS_ORIGINS", "").strip()
@@ -281,7 +283,6 @@ def _bootstrap_admin():
         from app.database import SessionLocal
         from app.models import User
 
-        # Try common password-hasher names
         try:
             from app.auth import hash_password
         except ImportError:
@@ -333,6 +334,13 @@ def _bootstrap_admin():
 
 @app.on_event("startup")
 async def startup_event():
+    # ✅ DEBUG: print which DB we're actually connected to
+    try:
+        from app.database import engine as _eng
+        print(f"🗄️  ACTUAL DB URL (startup): {_eng.url}")
+    except Exception as e:
+        print(f"⚠️  Could not read DB URL at startup: {e}")
+
     smtp_user = os.getenv("SMTP_USER", "")
     smtp_pass = os.getenv("SMTP_PASS", "")
     smtp_ready = bool(smtp_user and smtp_pass)
