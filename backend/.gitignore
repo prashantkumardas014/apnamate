@@ -29,3 +29,8 @@ uploads/
 backend/check_users.py
 backend/list_users.py
 backend/check_tables.py
+test_neon.py
+deep_check.py
+dump_users.py
+create_admin_direct.py
+app_engine_check.py
