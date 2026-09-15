@@ -11,11 +11,12 @@ function Notifications() {
   const [user, setUser] = useState(null);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [tick, setTick] = useState(0);
 
   const navigate = useNavigate();
 
   // ==============================
-  // CHECK USER LOGIN
+  // CHECK USER LOGIN + START POLLING
   // ==============================
 
   useEffect(() => {
@@ -25,24 +26,60 @@ function Notifications() {
       return;
     }
 
+    let userId;
     try {
       const userData = JSON.parse(storedUser);
       setUser(userData);
-      fetchNotifications(userData.id);
+      userId = userData.id;
     } catch (error) {
       console.error("Error parsing user data:", error);
       navigate("/login");
+      return;
     }
+
+    // Initial load
+    fetchNotifications(userId, { silent: false });
+
+    // ✅ Poll for new notifications every 15 seconds
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchNotifications(userId, { silent: true });
+      }
+    }, 15000);
+
+    // ✅ Re-render every 60 seconds so "5h ago" stays fresh
+    const tickInterval = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 60000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearInterval(tickInterval);
+    };
   }, [navigate]);
+
+  // Refresh when tab becomes visible again
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && user?.id) {
+        fetchNotifications(user.id, { silent: true });
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [user]);
 
   // ==============================
   // FETCH NOTIFICATIONS
   // ==============================
 
-  const fetchNotifications = async (userId) => {
+  const fetchNotifications = async (userId, opts = {}) => {
+    const silent = opts.silent === true;
     try {
-      setLoading(true);
-      setError("");
+      if (!silent) {
+        setLoading(true);
+        setError("");
+      }
 
       const response = await fetch(
         `${API_BASE_URL}/bookings/notifications/${userId}`,
@@ -67,14 +104,16 @@ function Notifications() {
         setNotifications(data.notifications || []);
       } else {
         setNotifications([]);
-        setError(data.message || "No notifications found");
+        if (!silent) setError(data.message || "No notifications found");
       }
     } catch (error) {
       console.error("Error fetching notifications:", error);
-      setError(error.message || "Unable to load notifications");
-      setNotifications([]);
+      if (!silent) {
+        setError(error.message || "Unable to load notifications");
+        setNotifications([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
