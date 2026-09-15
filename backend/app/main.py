@@ -261,15 +261,16 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 # =========================================================
-# ADMIN BOOTSTRAP HELPER
+# ADMIN BOOTSTRAP HELPER (FORCE-RESET VERSION)
 # =========================================================
 
 def _bootstrap_admin():
     """
-    Ensure an admin account exists.
+    Ensure the configured admin exists and FORCE-RESET its password.
+
     Reads ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME from env.
-    Promotes existing user if email already exists.
-    Idempotent — safe to run on every startup.
+    Runs on every startup. Writes to Render's actual DB.
+    Remove the force-reset once login is verified working.
     """
     admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
     admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
@@ -284,44 +285,47 @@ def _bootstrap_admin():
         from app.models import User
 
         try:
-            from app.auth import hash_password
+            from app.auth import hash_password, verify_password
         except ImportError:
             try:
                 from app.auth import get_password_hash as hash_password
+                from app.auth import verify_password
             except ImportError:
                 print("⚠️  Could not find password hasher in app.auth — skipping admin bootstrap")
                 return
 
         db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.email == admin_email).first()
 
-        existing_admin = db.query(User).filter(User.role == "admin").first()
-        if existing_admin:
-            print(f"ℹ️  Admin already exists: {existing_admin.email} — skipping bootstrap")
+            if user:
+                user.password = hash_password(admin_password)
+                user.role = "admin"
+                user.is_active = 1
+                user.updated_at = datetime.now()
+                db.commit()
+                db.refresh(user)
+                print(f"🔧 FORCED admin password reset for: {admin_email} (id={user.id})")
+            else:
+                user = User(
+                    name=admin_name,
+                    email=admin_email,
+                    password=hash_password(admin_password),
+                    role="admin",
+                    is_active=1,
+                    created_at=datetime.now(),
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+                print(f"🔧 FORCED admin creation: {admin_email} (id={user.id})")
+
+            # Verify
+            ok = verify_password(admin_password, user.password)
+            print(f"🔧 Verification after bootstrap: {ok}")
+
+        finally:
             db.close()
-            return
-
-        existing_user = db.query(User).filter(User.email == admin_email).first()
-
-        if existing_user:
-            existing_user.role = "admin"
-            existing_user.is_active = 1
-            existing_user.updated_at = datetime.now()
-            db.commit()
-            print(f"✅ Promoted existing user to admin: {admin_email}")
-        else:
-            admin = User(
-                name=admin_name,
-                email=admin_email,
-                password=hash_password(admin_password),
-                role="admin",
-                is_active=1,
-                created_at=datetime.now(),
-            )
-            db.add(admin)
-            db.commit()
-            print(f"✅ Admin created on startup: {admin_email}")
-
-        db.close()
 
     except Exception as e:
         print(f"⚠️  Admin bootstrap failed: {e}")
@@ -334,7 +338,6 @@ def _bootstrap_admin():
 
 @app.on_event("startup")
 async def startup_event():
-    # ✅ DEBUG: print which DB we're actually connected to
     try:
         from app.database import engine as _eng
         print(f"🗄️  ACTUAL DB URL (startup): {_eng.url}")
@@ -356,7 +359,7 @@ async def startup_event():
     print("📱 SMS  :", "✅ configured" if sms_ready else "⚠️  not configured")
     print("=" * 60)
 
-    # ✅ Auto-create/promote admin on startup
+    # ✅ Force-reset admin on every startup
     _bootstrap_admin()
 
     print("=" * 60)
