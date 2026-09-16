@@ -1,0 +1,16 @@
+{
+  "name": "ApnaMate",
+  "packageId": "com.apnamate.app",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "webDir": "dist",
+  "startUrl": "/",
+  "themeColor": "#2563eb",
+  "backgroundColor": "#ffffff",
+  "orientation": "portrait",
+  "fullscreen": false,
+  "allowNavigation": [
+    "apnamate.vercel.app",
+    "apnamate-backend-2026.onrender.com"
+  ]
+}
