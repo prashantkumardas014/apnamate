@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { API_BASE_URL } from "../config";
 
 function Register() {
+  const navigate = useNavigate();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,61 +17,58 @@ function Register() {
   const [price, setPrice] = useState("");
 
   const [message, setMessage] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    setMessage("");
+    setIsSuccess(false);
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/register`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: name,
-            email: email,
-            password: password,
-            role: role,
-
-            // Provider information
-            service: role === "provider" ? service : null,
-            location: role === "provider" ? location : null,
-            experience:
-              role === "provider" ? experience : null,
-
-            // Automatically add ₹ symbol
-            price:
-              role === "provider" && price
-                ? `₹${price}`
-                : null,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          email: email,
+          password: password,
+          role: role,
+          service: role === "provider" ? service : null,
+          location: role === "provider" ? location : null,
+          experience: role === "provider" ? experience : null,
+          price:
+            role === "provider" && price ? `₹${price}` : null,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setMessage(
-          data.detail || "Registration failed"
-        );
+        setMessage(data.detail || "Registration failed");
         return;
       }
 
-      setMessage(data.message);
+      // Success — show message and redirect to login
+      setMessage(
+        (data.message || "Registration successful") +
+          " — Redirecting to login..."
+      );
+      setIsSuccess(true);
 
-      // Clear form after successful registration
-      if (data.user_id) {
-        setName("");
-        setEmail("");
-        setPassword("");
-        setRole("customer");
-        setService("");
-        setLocation("");
-        setExperience("");
-        setPrice("");
-      }
+      // Clear the form
+      setName("");
+      setEmail("");
+      setPassword("");
+      setRole("customer");
+      setService("");
+      setLocation("");
+      setExperience("");
+      setPrice("");
+
+      // Redirect after a short delay so the user sees the message
+      setTimeout(() => {
+        navigate("/login", { replace: true });
+      }, 1200);
     } catch (error) {
       console.error(error);
       setMessage("Unable to connect to backend");
@@ -93,20 +93,13 @@ function Register() {
           padding: "30px",
           borderRadius: "10px",
           width: "350px",
-          boxShadow:
-            "0 4px 15px rgba(0,0,0,0.1)",
+          boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
         }}
       >
-        <h1
-          style={{
-            textAlign: "center",
-            color: "#2563eb",
-          }}
-        >
+        <h1 style={{ textAlign: "center", color: "#2563eb" }}>
           Create Account
         </h1>
 
-        {/* Name */}
         <input
           type="text"
           placeholder="Full Name"
@@ -116,7 +109,6 @@ function Register() {
           style={inputStyle}
         />
 
-        {/* Email */}
         <input
           type="email"
           placeholder="Email"
@@ -126,7 +118,6 @@ function Register() {
           style={inputStyle}
         />
 
-        {/* Password */}
         <input
           type="password"
           placeholder="Password"
@@ -136,19 +127,15 @@ function Register() {
           style={inputStyle}
         />
 
-        {/* Role */}
         <select
           value={role}
           onChange={(e) => setRole(e.target.value)}
           style={inputStyle}
         >
           <option value="customer">Customer</option>
-          <option value="provider">
-            Service Provider
-          </option>
+          <option value="provider">Service Provider</option>
         </select>
 
-        {/* Provider fields */}
         {role === "provider" && (
           <div>
             <h3
@@ -161,83 +148,50 @@ function Register() {
               Provider Details
             </h3>
 
-            {/* Service */}
             <select
               value={service}
-              onChange={(e) =>
-                setService(e.target.value)
-              }
+              onChange={(e) => setService(e.target.value)}
               required
               style={inputStyle}
             >
-              <option value="">
-                Select Service
-              </option>
-
-              <option value="Electrician">
-                Electrician
-              </option>
-
-              <option value="Plumber">
-                Plumber
-              </option>
-
-              <option value="AC Repair">
-                AC Repair
-              </option>
-
-              <option value="Cleaning">
-                Cleaning
-              </option>
-
-              <option value="Computer Repair">
-                Computer Repair
-              </option>
-
-              <option value="Appliance Repair">
-                Appliance Repair
-              </option>
+              <option value="">Select Service</option>
+              <option value="Electrician">Electrician</option>
+              <option value="Plumber">Plumber</option>
+              <option value="AC Repair">AC Repair</option>
+              <option value="Cleaning">Cleaning</option>
+              <option value="Computer Repair">Computer Repair</option>
+              <option value="Appliance Repair">Appliance Repair</option>
             </select>
 
-            {/* Location */}
             <input
               type="text"
               placeholder="Location"
               value={location}
-              onChange={(e) =>
-                setLocation(e.target.value)
-              }
+              onChange={(e) => setLocation(e.target.value)}
               required
               style={inputStyle}
             />
 
-            {/* Experience */}
             <input
               type="text"
               placeholder="Experience (e.g. 5 years)"
               value={experience}
-              onChange={(e) =>
-                setExperience(e.target.value)
-              }
+              onChange={(e) => setExperience(e.target.value)}
               required
               style={inputStyle}
             />
 
-            {/* Price */}
             <input
               type="text"
               placeholder="Price (e.g. 800 - 1000)"
               value={price}
-              onChange={(e) =>
-                setPrice(e.target.value)
-              }
+              onChange={(e) => setPrice(e.target.value)}
               required
               style={inputStyle}
             />
           </div>
         )}
 
-        {/* Register button */}
         <button
           type="submit"
           style={{
@@ -254,17 +208,29 @@ function Register() {
           Register
         </button>
 
-        {/* Message */}
         {message && (
           <p
             style={{
               textAlign: "center",
               marginTop: "15px",
+              color: isSuccess ? "#16a34a" : "#dc2626",
+              fontWeight: "bold",
             }}
           >
             {message}
           </p>
         )}
+
+        {/* Always show login link — critical for the APK so users aren't stuck */}
+        <p style={{ textAlign: "center", marginTop: "15px", color: "#666" }}>
+          Already have an account?{" "}
+          <Link
+            to="/login"
+            style={{ color: "#2563eb", fontWeight: "bold", textDecoration: "none" }}
+          >
+            Login
+          </Link>
+        </p>
       </form>
     </div>
   );
