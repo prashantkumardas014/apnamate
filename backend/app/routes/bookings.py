@@ -1432,12 +1432,9 @@ async def delete_booking_admin(
     """
     Admin delete booking.
 
-    Strategy:
-    1. Delete dependent rows first (notifications, reviews, bills,
-       payouts, payments).
-    2. Then delete the booking itself.
-    3. If anything still references it (rare FK), fall back to
-       soft-delete (status = 'cancelled') so admin never sees an error.
+    Deletes dependent rows first (notifications, reviews, bills,
+    payouts, payments), then the booking itself. Falls back to
+    soft-delete if a FK still blocks.
     """
     try:
         booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
@@ -1600,12 +1597,12 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
         if user.role == "admin":
             raise HTTPException(403, "Cannot delete another admin")
 
-        # ── 1. Notifications directly sent to this user ───────────
+        # 1. Notifications sent to this user
         db.query(models.Notification).filter(
             models.Notification.user_id == user_id
         ).delete(synchronize_session=False)
 
-        # ── 2. Notifications attached to any of this user's bookings ─
+        # 2. Notifications attached to this user's bookings
         booking_ids = [
             b.id for b in db.query(models.Booking.id).filter(
                 or_(
@@ -1619,7 +1616,7 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
                 models.Notification.booking_id.in_(booking_ids)
             ).delete(synchronize_session=False)
 
-        # ── 3. Reviews written by OR received by this user ────────
+        # 3. Reviews written by or received by this user
         db.query(models.Review).filter(
             or_(
                 models.Review.customer_id == user_id,
@@ -1627,7 +1624,7 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
             )
         ).delete(synchronize_session=False)
 
-        # ── 4. Bills where the user is customer or provider ───────
+        # 4. Bills where user is customer or provider
         db.query(models.Bill).filter(
             or_(
                 models.Bill.customer_id == user_id,
@@ -1635,12 +1632,12 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
             )
         ).delete(synchronize_session=False)
 
-        # ── 5. Payouts to this user ───────────────────────────────
+        # 5. Provider payouts to this user
         db.query(models.ProviderPayout).filter(
             models.ProviderPayout.provider_id == user_id
         ).delete(synchronize_session=False)
 
-        # ── 6. Payments made by or owed to this user ──────────────
+        # 6. Payments by or to this user
         db.query(models.Payment).filter(
             or_(
                 models.Payment.user_id == user_id,
@@ -1648,7 +1645,7 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
             )
         ).delete(synchronize_session=False)
 
-        # ── 7. Bookings (as customer or provider) ─────────────────
+        # 7. Bookings as customer or provider
         db.query(models.Booking).filter(
             or_(
                 models.Booking.customer_id == user_id,
@@ -1656,7 +1653,7 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
             )
         ).delete(synchronize_session=False)
 
-        # ── 8. Admin logs written by this user (rare) ─────────────
+        # 8. Admin logs (rare)
         try:
             db.query(models.AdminLog).filter(
                 models.AdminLog.admin_id == user_id
@@ -1664,7 +1661,7 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"⚠️ AdminLog cleanup skipped: {e}")
 
-        # ── 9. Email logs to this user's email (if any) ───────────
+        # 9. Email logs to this user's email
         try:
             if user.email:
                 db.query(models.EmailLog).filter(
@@ -1673,7 +1670,7 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"⚠️ EmailLog cleanup skipped: {e}")
 
-        # ── 10. Finally — delete the user ─────────────────────────
+        # 10. Finally delete the user
         db.delete(user)
         db.commit()
 
