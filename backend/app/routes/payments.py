@@ -1,5 +1,5 @@
 # backend/app/routes/payments.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -1212,9 +1212,47 @@ async def get_bill_for_booking(
 @router.get("/payments/bills/{bill_id}/download")
 async def download_bill(
     bill_id: int,
-    current_user: User = Depends(get_current_user),
+    request: Request,
+    token: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    """
+    Download a bill PDF.
+
+    Auth: accepts either
+      - Authorization: Bearer <jwt>  (normal API clients)
+      - ?token=<jwt>                 (external browsers / WebView handoffs,
+                                      where headers can't be set)
+    """
+    from jose import JWTError, jwt
+    from app.config import config
+
+    # ── Resolve the user (header OR query-param token) ──────────────────
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+
+    raw_token: Optional[str] = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        raw_token = auth_header.split(" ", 1)[1].strip()
+    elif token:
+        raw_token = token.strip()
+
+    if not raw_token:
+        raise HTTPException(401, "Not authenticated")
+
+    # Decode JWT
+    try:
+        payload = jwt.decode(raw_token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(401, "Invalid token")
+    except JWTError:
+        raise HTTPException(401, "Invalid token")
+
+    current_user = db.query(User).filter(User.id == int(user_id)).first()
+    if not current_user:
+        raise HTTPException(401, "User not found")
+
+    # ── Authorization check ─────────────────────────────────────────────
     bill = db.query(Bill).filter(Bill.id == bill_id).first()
     if not bill:
         raise HTTPException(404, "Bill not found")
@@ -1227,7 +1265,7 @@ async def download_bill(
     if not is_party:
         raise HTTPException(403, "Not allowed")
 
-    # ✅ Role-aware PDF: provider/admin gets payout statement, customer gets receipt
+    # ── Role-aware PDF ──────────────────────────────────────────────────
     if current_user.role == "admin" or bill.provider_id == current_user.id:
         pdf_bytes = generate_provider_bill_pdf(bill)
         filename_prefix = "ApnaMate-Payout"
