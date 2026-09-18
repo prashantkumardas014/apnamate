@@ -88,7 +88,7 @@ export default function VerifyOtp({ setUser }) {
       let to = "/dashboard";
       if (user.role === "admin") to = "/admin-dashboard";
       else if (user.role === "provider") to = "/provider-dashboard";
-      window.location.href = to;
+      navigate(to, { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

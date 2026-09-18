@@ -99,7 +99,7 @@ function Login({ setUser }) {
         console.log(`➡️ Redirecting to: ${redirectPath}`);
 
         setTimeout(() => {
-          window.location.href = redirectPath;
+          navigate(redirectPath, { replace: true });
         }, 800);
 
       } else {

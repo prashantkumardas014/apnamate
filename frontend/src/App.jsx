@@ -1,52 +1,38 @@
 // src/App.jsx
 /* eslint-disable react/set-state-in-effect */
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 // ==============================
-// PAGE IMPORTS (lazy-loaded)
+// PAGE IMPORTS (static — required for WebView)
 // ==============================
-const Home = lazy(() => import("./pages/Home"));
-const HomeFeed = lazy(() => import("./pages/HomeFeed"));
-const Login = lazy(() => import("./components/auth/Login"));
-const Register = lazy(() => import("./pages/Register"));
-const ForgotPassword = lazy(() => import("./components/auth/ForgotPassword"));
-const ResetPassword = lazy(() => import("./components/auth/ResetPassword"));
-const Services = lazy(() => import("./pages/Services"));
-const Providers = lazy(() => import("./pages/Providers"));
-const ProviderDashboard = lazy(() => import("./pages/ProviderDashboard"));
-const ProviderProfile = lazy(() => import("./pages/ProviderProfile"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Booking = lazy(() => import("./pages/Booking"));
-const MyBookings = lazy(() => import("./pages/MyBookings"));
-const MyReviews = lazy(() => import("./pages/MyReviews"));
-const MyPayments = lazy(() => import("./pages/MyPayments"));
-const MyBills = lazy(() => import("./pages/MyBills"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-
-// ✅ Unified profile page (role-aware)
-const Profile = lazy(() => import("./pages/Profile"));
-
-// ✅ NEW: Edit Profile page
-const EditProfile = lazy(() => import("./pages/EditProfile"));
-
-// ✅ Phone OTP auth pages
-const LoginPhone = lazy(() => import("./pages/LoginPhone"));
-const VerifyOtp = lazy(() => import("./pages/VerifyOtp"));
-
-// ==============================
-// ADMIN PAGES
-// ==============================
-const AdminUsers = lazy(() => import("./pages/AdminUsers"));
-const AdminBookings = lazy(() => import("./pages/AdminBookings"));
-const AdminReviews = lazy(() => import("./pages/AdminReviews"));
-const AdminPayments = lazy(() => import("./pages/AdminPayments"));
-
-// ==============================
-// ANALYTICS
-// ==============================
-const ReviewAnalytics = lazy(() => import("./components/ReviewAnalytics"));
+import Home from "./pages/Home";
+import HomeFeed from "./pages/HomeFeed";
+import Login from "./components/auth/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./components/auth/ForgotPassword";
+import ResetPassword from "./components/auth/ResetPassword";
+import Services from "./pages/Services";
+import Providers from "./pages/Providers";
+import ProviderDashboard from "./pages/ProviderDashboard";
+import ProviderProfile from "./pages/ProviderProfile";
+import Dashboard from "./pages/Dashboard";
+import Booking from "./pages/Booking";
+import MyBookings from "./pages/MyBookings";
+import MyReviews from "./pages/MyReviews";
+import MyPayments from "./pages/MyPayments";
+import MyBills from "./pages/MyBills";
+import Notifications from "./pages/Notifications";
+import AdminDashboard from "./pages/AdminDashboard";
+import Profile from "./pages/Profile";
+import EditProfile from "./pages/EditProfile";
+import LoginPhone from "./pages/LoginPhone";
+import VerifyOtp from "./pages/VerifyOtp";
+import AdminUsers from "./pages/AdminUsers";
+import AdminBookings from "./pages/AdminBookings";
+import AdminReviews from "./pages/AdminReviews";
+import AdminPayments from "./pages/AdminPayments";
+import ReviewAnalytics from "./components/ReviewAnalytics";
 
 // ==============================
 // SHARED COMPONENTS
@@ -165,284 +151,276 @@ function App() {
 
       <main className="main-content">
         <ErrorBoundary>
-          <Suspense fallback={<div className="loading-screen">Loading...</div>}>
-            <Routes>
-              {/* PUBLIC — Home marketing page if logged out, HomeFeed if logged in */}
-              <Route
-                path="/"
-                element={
-                  user ? (
-                    <ProtectedRoute user={user}>
-                      <HomeFeed user={user} />
-                    </ProtectedRoute>
-                  ) : (
-                    <Home />
-                  )
-                }
-              />
-
-              {/* AUTH */}
-              <Route
-                path="/login"
-                element={
-                  user ? (
-                    <Navigate to={homeForRole(user.role)} replace />
-                  ) : (
-                    <Login setUser={setUser} />
-                  )
-                }
-              />
-              <Route
-                path="/register"
-                element={
-                  user ? (
-                    <Navigate to={homeForRole(user.role)} replace />
-                  ) : (
-                    <Register />
-                  )
-                }
-              />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-
-              {/* ✅ Phone OTP login */}
-              <Route
-                path="/login-phone"
-                element={
-                  user ? (
-                    <Navigate to={homeForRole(user.role)} replace />
-                  ) : (
-                    <LoginPhone />
-                  )
-                }
-              />
-              <Route
-                path="/verify-otp"
-                element={
-                  user ? (
-                    <Navigate to={homeForRole(user.role)} replace />
-                  ) : (
-                    <VerifyOtp setUser={setUser} />
-                  )
-                }
-              />
-
-              {/* PROTECTED — ALL USERS */}
-              <Route
-                path="/dashboard"
-                element={
+          <Routes>
+            {/* PUBLIC — Home marketing page if logged out, HomeFeed if logged in */}
+            <Route
+              path="/"
+              element={
+                user ? (
                   <ProtectedRoute user={user}>
-                    <Dashboard />
+                    <HomeFeed user={user} />
                   </ProtectedRoute>
-                }
-              />
+                ) : (
+                  <Home />
+                )
+              }
+            />
 
-              {/* ✅ Unified profile page — any logged-in user */}
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute user={user}>
-                    <Profile />
-                  </ProtectedRoute>
-                }
-              />
+            {/* AUTH */}
+            <Route
+              path="/login"
+              element={
+                user ? (
+                  <Navigate to={homeForRole(user.role)} replace />
+                ) : (
+                  <Login setUser={setUser} />
+                )
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                user ? (
+                  <Navigate to={homeForRole(user.role)} replace />
+                ) : (
+                  <Register />
+                )
+              }
+            />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-              {/* ✅ NEW: Edit profile with avatar upload + Aadhaar verify */}
-              <Route
-                path="/profile/edit"
-                element={
-                  <ProtectedRoute user={user}>
-                    <EditProfile />
-                  </ProtectedRoute>
-                }
-              />
+            {/* ✅ Phone OTP login */}
+            <Route
+              path="/login-phone"
+              element={
+                user ? (
+                  <Navigate to={homeForRole(user.role)} replace />
+                ) : (
+                  <LoginPhone />
+                )
+              }
+            />
+            <Route
+              path="/verify-otp"
+              element={
+                user ? (
+                  <Navigate to={homeForRole(user.role)} replace />
+                ) : (
+                  <VerifyOtp setUser={setUser} />
+                )
+              }
+            />
 
-              {/* ✅ Backwards compat: old customer-profile redirects */}
-              <Route
-                path="/customer-profile"
-                element={<Navigate to="/profile" replace />}
-              />
+            {/* PROTECTED — ALL USERS */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute user={user}>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/services"
-                element={
-                  <ProtectedRoute user={user}>
-                    <Services />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute user={user}>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/providers"
-                element={
-                  <ProtectedRoute user={user}>
-                    <Providers />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/profile/edit"
+              element={
+                <ProtectedRoute user={user}>
+                  <EditProfile />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/booking"
-                element={
-                  <ProtectedRoute user={user}>
-                    <Booking />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/customer-profile"
+              element={<Navigate to="/profile" replace />}
+            />
 
-              <Route
-                path="/my-bookings"
-                element={
-                  <ProtectedRoute user={user}>
-                    <MyBookings />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/services"
+              element={
+                <ProtectedRoute user={user}>
+                  <Services />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/my-reviews"
-                element={
-                  <ProtectedRoute user={user}>
-                    <MyReviews />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/providers"
+              element={
+                <ProtectedRoute user={user}>
+                  <Providers />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/my-payments"
-                element={
-                  <ProtectedRoute user={user}>
-                    <MyPayments />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/booking"
+              element={
+                <ProtectedRoute user={user}>
+                  <Booking />
+                </ProtectedRoute>
+              }
+            />
 
-              {/* ✅ My Bills — all logged-in users */}
-              <Route
-                path="/my-bills"
-                element={
-                  <ProtectedRoute user={user}>
-                    <MyBills />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/my-bookings"
+              element={
+                <ProtectedRoute user={user}>
+                  <MyBookings />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/notifications"
-                element={
-                  <ProtectedRoute user={user}>
-                    <Notifications />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/my-reviews"
+              element={
+                <ProtectedRoute user={user}>
+                  <MyReviews />
+                </ProtectedRoute>
+              }
+            />
 
-              {/* PROVIDER (and admin override) */}
-              <Route
-                path="/provider-dashboard"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                    <ProviderDashboard />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/my-payments"
+              element={
+                <ProtectedRoute user={user}>
+                  <MyPayments />
+                </ProtectedRoute>
+              }
+            />
 
-              {/* ✅ Provider-profile redirects to the unified /profile */}
-              <Route
-                path="/provider-profile"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                    <Navigate to="/profile" replace />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/my-bills"
+              element={
+                <ProtectedRoute user={user}>
+                  <MyBills />
+                </ProtectedRoute>
+              }
+            />
 
-              {/* Public provider detail page */}
-              <Route
-                path="/provider/:id"
-                element={
-                  <ProtectedRoute user={user}>
-                    <ProviderProfile />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute user={user}>
+                  <Notifications />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/provider-analytics"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                    <ReviewAnalytics providerId={user?.id} />
-                  </ProtectedRoute>
-                }
-              />
+            {/* PROVIDER */}
+            <Route
+              path="/provider-dashboard"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                  <ProviderDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/provider-analytics/:providerId"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
-                    <ReviewAnalytics />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/provider-profile"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                  <Navigate to="/profile" replace />
+                </ProtectedRoute>
+              }
+            />
 
-              {/* ADMIN */}
-              <Route
-                path="/admin-dashboard"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/provider/:id"
+              element={
+                <ProtectedRoute user={user}>
+                  <ProviderProfile />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/provider-analytics"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                  <ReviewAnalytics providerId={user?.id} />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/admin/users"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                    <AdminUsers />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/provider-analytics/:providerId"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["provider", "admin"]}>
+                  <ReviewAnalytics />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/admin/bookings"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                    <AdminBookings />
-                  </ProtectedRoute>
-                }
-              />
+            {/* ADMIN */}
+            <Route
+              path="/admin-dashboard"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/admin/reviews"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                    <AdminReviews />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
 
-              <Route
-                path="/admin/payments"
-                element={
-                  <ProtectedRoute user={user} allowedRoles={["admin"]}>
-                    <AdminPayments />
-                  </ProtectedRoute>
-                }
-              />
+            <Route
+              path="/admin/users"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                  <AdminUsers />
+                </ProtectedRoute>
+              }
+            />
 
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Suspense>
+            <Route
+              path="/admin/bookings"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                  <AdminBookings />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/reviews"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                  <AdminReviews />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/payments"
+              element={
+                <ProtectedRoute user={user} allowedRoles={["admin"]}>
+                  <AdminPayments />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </ErrorBoundary>
       </main>
     </div>

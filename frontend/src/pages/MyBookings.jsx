@@ -641,7 +641,7 @@ function MyBookings() {
     localStorage.removeItem("user");
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("accessToken");
-    window.location.href = "/login";
+    localStorage.clear(); window.location.replace("#/login"); window.location.reload();
   };
 
   // ==============================
@@ -664,7 +664,7 @@ function MyBookings() {
       >
         <h2
           style={{ margin: 0, cursor: "pointer" }}
-          onClick={() => (window.location.href = "/")}
+          onClick={() => (window.location.hash = "#/")}
         >
           🔧 ApnaMate
         </h2>
@@ -672,7 +672,7 @@ function MyBookings() {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
-            onClick={() => (window.location.href = "/dashboard")}
+            onClick={() => (window.location.hash = "#/dashboard")}
             style={{
               padding: "10px 18px",
               backgroundColor: "white",
@@ -707,7 +707,7 @@ function MyBookings() {
       <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px 20px" }}>
         <button
           type="button"
-          onClick={() => (window.location.href = "/dashboard")}
+          onClick={() => (window.location.hash = "#/dashboard")}
           style={{
             padding: "10px 18px",
             backgroundColor: "#e5e7eb",
@@ -865,7 +865,7 @@ function MyBookings() {
             <p>You haven't booked any services yet.</p>
             <button
               type="button"
-              onClick={() => (window.location.href = "/services")}
+              onClick={() => (window.location.hash = "#/services")}
               style={{ padding: "12px 20px", backgroundColor: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
             >
               Book a Service

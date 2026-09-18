@@ -135,7 +135,7 @@ function Services() {
     localStorage.removeItem("user");
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("accessToken");
-    window.location.href = "/login";
+    window.location.replace("#/login"); window.location.reload();
   };
 
   // ==============================

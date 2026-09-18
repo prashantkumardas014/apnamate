@@ -72,7 +72,7 @@ function Navbar({ user, setUser }) {
     sessionStorage.clear();
     setUnreadCount(0);
     if (typeof setUser === "function") setUser(null);
-    window.location.href = "/login";
+    navigate("/login", { replace: true });   // ✅ FIXED
   };
 
   // ==============================
@@ -157,7 +157,7 @@ function Navbar({ user, setUser }) {
           style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
         >
           <img
-            src="/logo-white.svg"
+            src="./logo-white.svg"
             alt=""
             width="28"
             height="28"

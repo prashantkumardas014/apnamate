@@ -28,7 +28,7 @@ export const logout = () => {
   console.log("✅ Logged out successfully");
   
   // Redirect to login with full page reload
-  window.location.href = "/login";
+  localStorage.clear(); window.location.replace("#/login"); window.location.reload();
 };
 
 export default logout;

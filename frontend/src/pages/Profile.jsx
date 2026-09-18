@@ -1,4 +1,4 @@
-﻿// frontend/src/pages/Profile.jsx
+// frontend/src/pages/Profile.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config";
@@ -615,7 +615,7 @@ export default function Profile() {
                   localStorage.removeItem("user");
                   localStorage.removeItem("accessToken");
                   localStorage.removeItem("isLoggedIn");
-                  window.location.href = "/login";
+                  localStorage.clear(); window.location.replace("#/login"); window.location.reload();
                 }}
               >
                 🚪 Logout

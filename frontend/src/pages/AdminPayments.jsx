@@ -150,7 +150,7 @@ export default function AdminPayments() {
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("accessToken");
-    window.location.href = "/login";
+    window.location.replace("#/login"); window.location.reload();
   };
 
   // ==============================

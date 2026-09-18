@@ -1,7 +1,8 @@
-﻿// frontend/src/components/common/ErrorBoundary.jsx
+// frontend/src/components/common/ErrorBoundary.jsx
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
-class ErrorBoundary extends React.Component {
+class ErrorBoundaryInner extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, error: null, info: null };
@@ -15,6 +16,17 @@ class ErrorBoundary extends React.Component {
     console.error("❌ ErrorBoundary caught:", error, info);
     this.setState({ info });
   }
+
+  handleClearAndLogout = () => {
+    localStorage.clear();
+    // ✅ Use React Router navigate passed via props (works in WebView / HashRouter)
+    if (this.props.navigate) {
+      this.props.navigate("/login", { replace: true });
+    } else {
+      // Fallback — should not happen, but safe
+      localStorage.clear(); window.location.replace("#/login"); window.location.reload();
+    }
+  };
 
   render() {
     if (this.state.hasError) {
@@ -93,10 +105,7 @@ class ErrorBoundary extends React.Component {
 
             <div style={{ marginTop: 22, display: "flex", gap: 10 }}>
               <button
-                onClick={() => {
-                  localStorage.clear();
-                  window.location.href = "/login";
-                }}
+                onClick={this.handleClearAndLogout}
                 style={{
                   padding: "10px 18px",
                   background: "#dc2626",
@@ -130,6 +139,12 @@ class ErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+// ✅ Wrapper gives the class component access to `navigate`
+function ErrorBoundary(props) {
+  const navigate = useNavigate();
+  return <ErrorBoundaryInner {...props} navigate={navigate} />;
 }
 
 export default ErrorBoundary;

@@ -532,7 +532,7 @@ function ProviderDashboard() {
     localStorage.removeItem("isLoggedIn");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("booking");
-    window.location.href = "/login";
+    window.location.replace("#/login"); window.location.reload();
   };
 
   const handleRefresh = () => {

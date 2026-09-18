@@ -158,7 +158,7 @@ export default function EditProfile() {
 
       showMessage("✅ Profile saved!");
       // ✅ Full reload so /profile re-fetches fresh data
-      setTimeout(() => { window.location.href = "/profile"; }, 700);
+      setTimeout(() => { window.location.hash = "#/profile"; }, 700);
     } catch (err) {
       showMessage(err.message, "error");
     } finally {
