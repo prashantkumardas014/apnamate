@@ -1175,7 +1175,6 @@ async def get_user_profile(
                 "stats": stats if show_full else None,
                 "provider_stats": provider_stats,
 
-                # ✅ NEW: fields used by Profile / EditProfile pages
                 "phone": getattr(user, "phone", None),
                 "phone_verified": int(getattr(user, "phone_verified", 0) or 0),
                 "avatar_url": getattr(user, "avatar_url", None),
@@ -1349,8 +1348,6 @@ async def get_all_users_admin(
                 "is_active": user.is_active,
                 "booking_count": booking_count,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
-
-                # ✅ NEW fields
                 "phone": getattr(user, "phone", None),
                 "phone_verified": int(getattr(user, "phone_verified", 0) or 0),
                 "avatar_url": getattr(user, "avatar_url", None),
@@ -1447,12 +1444,10 @@ async def delete_booking_admin(
         if not booking:
             raise HTTPException(404, "Booking not found")
 
-        # ── 1. Delete dependent notifications ─────────────────────
         db.query(models.Notification).filter(
             models.Notification.booking_id == booking_id
         ).delete(synchronize_session=False)
 
-        # ── 2. Delete dependent reviews ───────────────────────────
         try:
             db.query(models.Review).filter(
                 models.Review.booking_id == booking_id
@@ -1460,7 +1455,6 @@ async def delete_booking_admin(
         except Exception as e:
             print(f"⚠️ Review delete skipped: {e}")
 
-        # ── 3. Delete dependent bills ─────────────────────────────
         try:
             db.query(models.Bill).filter(
                 models.Bill.booking_id == booking_id
@@ -1468,7 +1462,6 @@ async def delete_booking_admin(
         except Exception as e:
             print(f"⚠️ Bill delete skipped: {e}")
 
-        # ── 4. Delete dependent provider payouts ──────────────────
         try:
             db.query(models.ProviderPayout).filter(
                 models.ProviderPayout.booking_id == booking_id
@@ -1476,7 +1469,6 @@ async def delete_booking_admin(
         except Exception as e:
             print(f"⚠️ Payout delete skipped: {e}")
 
-        # ── 5. Delete dependent payments ──────────────────────────
         try:
             db.query(models.Payment).filter(
                 models.Payment.booking_id == booking_id
@@ -1486,7 +1478,6 @@ async def delete_booking_admin(
 
         db.commit()
 
-        # ── 6. Try the actual booking delete ──────────────────────
         try:
             db.delete(booking)
             db.commit()
@@ -1596,15 +1587,10 @@ async def unblock_user(user_id: int, db: Session = Depends(get_db)):
 @router.delete("/admin/users/{user_id}", dependencies=[Depends(get_current_admin_user)])
 async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
     """
-    Admin delete user.
+    Admin hard-delete user.
 
-    Strategy: SOFT DELETE.
-
-    Sets is_active = 0 and anonymizes the email so the user can
-    never log in again, but keeps booking, payment, and bill
-    history intact. Hard-deleting a user would cascade through
-    bookings → payments → bills → payouts → reviews and destroy
-    financial records.
+    Wipes all rows referencing this user, then deletes the user
+    itself. Use with caution — this is irreversible.
     """
     try:
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -1614,30 +1600,93 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
         if user.role == "admin":
             raise HTTPException(403, "Cannot delete another admin")
 
-        # ── Soft delete ───────────────────────────────────────────
-        user.is_active = 0
-        user.updated_at = datetime.now()
+        # ── 1. Notifications directly sent to this user ───────────
+        db.query(models.Notification).filter(
+            models.Notification.user_id == user_id
+        ).delete(synchronize_session=False)
 
-        # Anonymize login credentials so they can't re-register/login
-        original_email = user.email or ""
-        if not original_email.startswith("deleted_"):
-            user.email = f"deleted_{user_id}_{original_email}"
+        # ── 2. Notifications attached to any of this user's bookings ─
+        booking_ids = [
+            b.id for b in db.query(models.Booking.id).filter(
+                or_(
+                    models.Booking.customer_id == user_id,
+                    models.Booking.provider_id == user_id,
+                )
+            ).all()
+        ]
+        if booking_ids:
+            db.query(models.Notification).filter(
+                models.Notification.booking_id.in_(booking_ids)
+            ).delete(synchronize_session=False)
 
-        if hasattr(user, "phone"):
-            user.phone = None
-        if hasattr(user, "upi_id"):
-            user.upi_id = None
+        # ── 3. Reviews written by OR received by this user ────────
+        db.query(models.Review).filter(
+            or_(
+                models.Review.customer_id == user_id,
+                models.Review.provider_id == user_id,
+            )
+        ).delete(synchronize_session=False)
 
+        # ── 4. Bills where the user is customer or provider ───────
+        db.query(models.Bill).filter(
+            or_(
+                models.Bill.customer_id == user_id,
+                models.Bill.provider_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+
+        # ── 5. Payouts to this user ───────────────────────────────
+        db.query(models.ProviderPayout).filter(
+            models.ProviderPayout.provider_id == user_id
+        ).delete(synchronize_session=False)
+
+        # ── 6. Payments made by or owed to this user ──────────────
+        db.query(models.Payment).filter(
+            or_(
+                models.Payment.user_id == user_id,
+                models.Payment.provider_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+
+        # ── 7. Bookings (as customer or provider) ─────────────────
+        db.query(models.Booking).filter(
+            or_(
+                models.Booking.customer_id == user_id,
+                models.Booking.provider_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+
+        # ── 8. Admin logs written by this user (rare) ─────────────
+        try:
+            db.query(models.AdminLog).filter(
+                models.AdminLog.admin_id == user_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ AdminLog cleanup skipped: {e}")
+
+        # ── 9. Email logs to this user's email (if any) ───────────
+        try:
+            if user.email:
+                db.query(models.EmailLog).filter(
+                    models.EmailLog.to_email == user.email
+                ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ EmailLog cleanup skipped: {e}")
+
+        # ── 10. Finally — delete the user ─────────────────────────
+        db.delete(user)
         db.commit()
 
         return {
             "success": True,
-            "message": f"User {user.name} has been deactivated and anonymized"
+            "message": f"User #{user_id} and all related records permanently deleted"
         }
+
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
+        print(f"❌ User delete failed: {e}")
         raise HTTPException(500, f"Error deleting user: {str(e)}")
 
 # =========================================================
