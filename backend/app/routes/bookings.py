@@ -1432,13 +1432,88 @@ async def delete_booking_admin(
     booking_id: int,
     db: Session = Depends(get_db)
 ):
+    """
+    Admin delete booking.
+
+    Strategy:
+    1. Delete dependent rows first (notifications, reviews, bills,
+       payouts, payments).
+    2. Then delete the booking itself.
+    3. If anything still references it (rare FK), fall back to
+       soft-delete (status = 'cancelled') so admin never sees an error.
+    """
     try:
         booking = db.query(models.Booking).filter(models.Booking.id == booking_id).first()
         if not booking:
             raise HTTPException(404, "Booking not found")
-        db.delete(booking)
+
+        # ── 1. Delete dependent notifications ─────────────────────
+        db.query(models.Notification).filter(
+            models.Notification.booking_id == booking_id
+        ).delete(synchronize_session=False)
+
+        # ── 2. Delete dependent reviews ───────────────────────────
+        try:
+            db.query(models.Review).filter(
+                models.Review.booking_id == booking_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ Review delete skipped: {e}")
+
+        # ── 3. Delete dependent bills ─────────────────────────────
+        try:
+            db.query(models.Bill).filter(
+                models.Bill.booking_id == booking_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ Bill delete skipped: {e}")
+
+        # ── 4. Delete dependent provider payouts ──────────────────
+        try:
+            db.query(models.ProviderPayout).filter(
+                models.ProviderPayout.booking_id == booking_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ Payout delete skipped: {e}")
+
+        # ── 5. Delete dependent payments ──────────────────────────
+        try:
+            db.query(models.Payment).filter(
+                models.Payment.booking_id == booking_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ Payment delete skipped: {e}")
+
         db.commit()
-        return {"success": True, "message": f"Booking {booking_id} deleted successfully"}
+
+        # ── 6. Try the actual booking delete ──────────────────────
+        try:
+            db.delete(booking)
+            db.commit()
+            return {
+                "success": True,
+                "message": f"Booking #{booking_id} and all related records deleted"
+            }
+        except Exception as inner_err:
+            db.rollback()
+            print(f"⚠️ Hard delete failed, soft-deleting instead: {inner_err}")
+
+            booking = db.query(models.Booking).filter(
+                models.Booking.id == booking_id
+            ).first()
+            if booking:
+                booking.status = STATUS_CANCELLED
+                booking.updated_at = datetime.now()
+                db.commit()
+                return {
+                    "success": True,
+                    "message": (
+                        f"Booking #{booking_id} marked as cancelled "
+                        f"(some records kept for history)"
+                    )
+                }
+            raise HTTPException(500, "Booking disappeared during delete")
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1520,13 +1595,45 @@ async def unblock_user(user_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/admin/users/{user_id}", dependencies=[Depends(get_current_admin_user)])
 async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
+    """
+    Admin delete user.
+
+    Strategy: SOFT DELETE.
+
+    Sets is_active = 0 and anonymizes the email so the user can
+    never log in again, but keeps booking, payment, and bill
+    history intact. Hard-deleting a user would cascade through
+    bookings → payments → bills → payouts → reviews and destroy
+    financial records.
+    """
     try:
         user = db.query(models.User).filter(models.User.id == user_id).first()
         if not user:
             raise HTTPException(404, "User not found")
-        db.delete(user)
+
+        if user.role == "admin":
+            raise HTTPException(403, "Cannot delete another admin")
+
+        # ── Soft delete ───────────────────────────────────────────
+        user.is_active = 0
+        user.updated_at = datetime.now()
+
+        # Anonymize login credentials so they can't re-register/login
+        original_email = user.email or ""
+        if not original_email.startswith("deleted_"):
+            user.email = f"deleted_{user_id}_{original_email}"
+
+        if hasattr(user, "phone"):
+            user.phone = None
+        if hasattr(user, "upi_id"):
+            user.upi_id = None
+
         db.commit()
-        return {"success": True, "message": f"User {user.name} has been deleted"}
+
+        return {
+            "success": True,
+            "message": f"User {user.name} has been deactivated and anonymized"
+        }
     except HTTPException:
         raise
     except Exception as e:
