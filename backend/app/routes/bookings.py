@@ -1441,6 +1441,14 @@ async def delete_booking_admin(
         if not booking:
             raise HTTPException(404, "Booking not found")
 
+        # Email logs first (they reference bills)
+        try:
+            db.query(models.EmailLog).filter(
+                models.EmailLog.booking_id == booking_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ EmailLog delete skipped: {e}")
+
         db.query(models.Notification).filter(
             models.Notification.booking_id == booking_id
         ).delete(synchronize_session=False)
@@ -1586,8 +1594,11 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
     """
     Admin hard-delete user.
 
-    Wipes all rows referencing this user, then deletes the user
-    itself. Use with caution — this is irreversible.
+    Wipes all rows referencing this user, then deletes the user itself.
+    Deletes in FK-safe order:
+
+    email_logs → notifications → reviews → bills → payouts → payments
+    → bookings → admin_logs → user
     """
     try:
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -1597,13 +1608,8 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
         if user.role == "admin":
             raise HTTPException(403, "Cannot delete another admin")
 
-        # 1. Notifications sent to this user
-        db.query(models.Notification).filter(
-            models.Notification.user_id == user_id
-        ).delete(synchronize_session=False)
-
-        # 2. Notifications attached to this user's bookings
-        booking_ids = [
+        # ── Collect IDs needed for cross-referencing ──────────────
+        user_booking_ids = [
             b.id for b in db.query(models.Booking.id).filter(
                 or_(
                     models.Booking.customer_id == user_id,
@@ -1611,58 +1617,27 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
                 )
             ).all()
         ]
-        if booking_ids:
-            db.query(models.Notification).filter(
-                models.Notification.booking_id.in_(booking_ids)
-            ).delete(synchronize_session=False)
+        user_bill_ids = [
+            b.id for b in db.query(models.Bill.id).filter(
+                or_(
+                    models.Bill.customer_id == user_id,
+                    models.Bill.provider_id == user_id,
+                )
+            ).all()
+        ]
 
-        # 3. Reviews written by or received by this user
-        db.query(models.Review).filter(
-            or_(
-                models.Review.customer_id == user_id,
-                models.Review.provider_id == user_id,
-            )
-        ).delete(synchronize_session=False)
-
-        # 4. Bills where user is customer or provider
-        db.query(models.Bill).filter(
-            or_(
-                models.Bill.customer_id == user_id,
-                models.Bill.provider_id == user_id,
-            )
-        ).delete(synchronize_session=False)
-
-        # 5. Provider payouts to this user
-        db.query(models.ProviderPayout).filter(
-            models.ProviderPayout.provider_id == user_id
-        ).delete(synchronize_session=False)
-
-        # 6. Payments by or to this user
-        db.query(models.Payment).filter(
-            or_(
-                models.Payment.user_id == user_id,
-                models.Payment.provider_id == user_id,
-            )
-        ).delete(synchronize_session=False)
-
-        # 7. Bookings as customer or provider
-        db.query(models.Booking).filter(
-            or_(
-                models.Booking.customer_id == user_id,
-                models.Booking.provider_id == user_id,
-            )
-        ).delete(synchronize_session=False)
-
-        # 8. Admin logs (rare)
+        # ── 1. Email logs (references bills + bookings) ───────────
         try:
-            db.query(models.AdminLog).filter(
-                models.AdminLog.admin_id == user_id
-            ).delete(synchronize_session=False)
-        except Exception as e:
-            print(f"⚠️ AdminLog cleanup skipped: {e}")
+            if user_bill_ids:
+                db.query(models.EmailLog).filter(
+                    models.EmailLog.bill_id.in_(user_bill_ids)
+                ).delete(synchronize_session=False)
 
-        # 9. Email logs to this user's email
-        try:
+            if user_booking_ids:
+                db.query(models.EmailLog).filter(
+                    models.EmailLog.booking_id.in_(user_booking_ids)
+                ).delete(synchronize_session=False)
+
             if user.email:
                 db.query(models.EmailLog).filter(
                     models.EmailLog.to_email == user.email
@@ -1670,7 +1645,58 @@ async def delete_user_admin(user_id: int, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"⚠️ EmailLog cleanup skipped: {e}")
 
-        # 10. Finally delete the user
+        # ── 2. Notifications (references bookings + users) ────────
+        db.query(models.Notification).filter(
+            models.Notification.user_id == user_id
+        ).delete(synchronize_session=False)
+
+        if user_booking_ids:
+            db.query(models.Notification).filter(
+                models.Notification.booking_id.in_(user_booking_ids)
+            ).delete(synchronize_session=False)
+
+        # ── 3. Reviews (references bookings + users) ──────────────
+        db.query(models.Review).filter(
+            or_(
+                models.Review.customer_id == user_id,
+                models.Review.provider_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+
+        # ── 4. Bills (references payments + bookings + users) ─────
+        if user_bill_ids:
+            db.query(models.Bill).filter(
+                models.Bill.id.in_(user_bill_ids)
+            ).delete(synchronize_session=False)
+
+        # ── 5. Provider payouts ───────────────────────────────────
+        db.query(models.ProviderPayout).filter(
+            models.ProviderPayout.provider_id == user_id
+        ).delete(synchronize_session=False)
+
+        # ── 6. Payments ───────────────────────────────────────────
+        db.query(models.Payment).filter(
+            or_(
+                models.Payment.user_id == user_id,
+                models.Payment.provider_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+
+        # ── 7. Bookings ───────────────────────────────────────────
+        if user_booking_ids:
+            db.query(models.Booking).filter(
+                models.Booking.id.in_(user_booking_ids)
+            ).delete(synchronize_session=False)
+
+        # ── 8. Admin logs (rare) ──────────────────────────────────
+        try:
+            db.query(models.AdminLog).filter(
+                models.AdminLog.admin_id == user_id
+            ).delete(synchronize_session=False)
+        except Exception as e:
+            print(f"⚠️ AdminLog cleanup skipped: {e}")
+
+        # ── 9. Finally delete the user ────────────────────────────
         db.delete(user)
         db.commit()
 
