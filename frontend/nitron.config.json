@@ -11,8 +11,5 @@
   "orientation": "portrait",
   "fullscreen": false,
   "icon": "icon.png",
-  "allowNavigation": [
-    "apnamate.vercel.app",
-    "apnamate-backend-2026.onrender.com"
-  ]
+  "allowNavigation": ["*"]
 }

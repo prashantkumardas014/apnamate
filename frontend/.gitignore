@@ -24,3 +24,24 @@ dist-ssr
 *.sw?
 ApnaMate/
 ApnaMate/
+
+# Dev backups — not for committing
+src.backup/
+src.patched/
+
+# Build helper files
+index.source.html
+nitron-src/
+
+# Copied web assets inside Android project
+android/app/src/main/assets/public/
+
+# Capacitor generated stuff
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/
