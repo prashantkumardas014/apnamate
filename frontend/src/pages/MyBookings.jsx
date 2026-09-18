@@ -15,6 +15,7 @@ function MyBookings() {
   const [messageType, setMessageType] = useState("info");
   const [cancellingId, setCancellingId] = useState(null);
   const [downloadingBillId, setDownloadingBillId] = useState(null);
+  const [copiedBillId, setCopiedBillId] = useState(null);
 
   // Payment states
   const [showPayment, setShowPayment] = useState(false);
@@ -80,7 +81,6 @@ function MyBookings() {
       const silent = opts.silent === true;
       try {
         if (!silent) setLoading(true);
-        // ✅ CLEAR stale errors on every fetch
         if (!silent) {
           setMessage("");
         }
@@ -107,7 +107,6 @@ function MyBookings() {
         }
         const data = await response.json();
         if (data.success) {
-          // ✅ Defensive: filter out malformed bookings
           const rawList = data.bookings || [];
           const bookingsData = rawList.filter(
             (b) => b && typeof b.id !== "undefined" && b.id !== null
@@ -121,7 +120,6 @@ function MyBookings() {
           });
           setReviewStates(initialReviewStates);
 
-          // ✅ Reset reviewedBookings BEFORE re-checking (fresh state)
           setReviewedBookings({});
           await checkReviewStatus(bookingsData);
         } else {
@@ -195,81 +193,98 @@ function MyBookings() {
   };
 
   // ==============================
-  // DOWNLOAD BILL (PDF)
+  // BILL HELPERS
+  // ==============================
+  const buildBillDownloadUrl = (billId) => {
+    const token = localStorage.getItem("accessToken") || "";
+    return `${API_BASE_URL}/bookings/payments/bills/${billId}/download?token=${encodeURIComponent(token)}`;
+  };
+
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fallback for WebViews with blocked clipboard API
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  // ==============================
+  // DOWNLOAD BILL (PDF) — copy-link fallback for WebView
   // ==============================
   const downloadBill = async (bookingId) => {
     setDownloadingBillId(bookingId);
     try {
       const token = localStorage.getItem("accessToken");
 
-      const infoRes = await fetch(
+      // 1. Resolve bill_id via booking endpoint
+      let infoRes = await fetch(
         `${API_BASE_URL}/bookings/payments/bills/booking/${bookingId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      if (!infoRes.ok) {
-        if (infoRes.status === 404) {
-          try {
-            await fetch(`${API_BASE_URL}/bookings/payments/bills/all`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-          } catch (bfErr) {
-            console.warn("Auto-backfill attempt failed:", bfErr);
-          }
-
-          const retry = await fetch(
-            `${API_BASE_URL}/bookings/payments/bills/booking/${bookingId}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-
-          if (!retry.ok) {
-            showMessage(
-              "Bill not available. Visit '🧾 My Bills' page to generate it.",
-              "info"
-            );
-            return;
-          }
-          const retryData = await retry.json();
-          await streamBillPdf(retryData, token);
-          return;
-        } else {
-          showMessage("Unable to fetch bill.", "error");
-          return;
+      // Auto-backfill if 404
+      if (infoRes.status === 404) {
+        try {
+          await fetch(`${API_BASE_URL}/bookings/payments/bills/all`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch (bfErr) {
+          console.warn("Auto-backfill attempt failed:", bfErr);
         }
+        infoRes = await fetch(
+          `${API_BASE_URL}/bookings/payments/bills/booking/${bookingId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
+      if (!infoRes.ok) {
+        showMessage(
+          "Bill not available. Visit '🧾 My Bills' page to generate it.",
+          "info"
+        );
+        return;
       }
 
       const infoData = await infoRes.json();
-      await streamBillPdf(infoData, token);
+      const billId = infoData?.bill?.bill_id;
+      if (!billId) throw new Error("Bill ID missing");
+
+      const pdfUrl = buildBillDownloadUrl(billId);
+
+      // 2. Copy to clipboard
+      const ok = await copyToClipboard(pdfUrl);
+      if (ok) {
+        setCopiedBillId(bookingId);
+        showMessage(
+          "📋 Bill link copied! Open Chrome and paste it to download",
+          "success"
+        );
+        setTimeout(() => setCopiedBillId(null), 3500);
+      } else {
+        // Last resort: show the URL in a prompt the user can copy from
+        window.prompt("Copy this bill URL and paste it in Chrome:", pdfUrl);
+      }
     } catch (err) {
       console.error("Bill download error:", err);
-      showMessage("Unable to download bill: " + err.message, "error");
+      showMessage("Unable to get bill link: " + err.message, "error");
     } finally {
       setDownloadingBillId(null);
     }
-  };
-
-  const streamBillPdf = async (infoData, token) => {
-    const billId = infoData.bill?.bill_id;
-    const billNumber = infoData.bill?.bill_number || "bill";
-    if (!billId) throw new Error("Bill ID missing");
-
-    const pdfRes = await fetch(
-      `${API_BASE_URL}/bookings/payments/bills/${billId}/download`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!pdfRes.ok) throw new Error("Download failed");
-
-    const blob = await pdfRes.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ApnaMate-Bill-${billNumber}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-    showMessage("📄 Bill downloaded!", "success");
   };
 
   // ==============================
@@ -304,7 +319,6 @@ function MyBookings() {
         quoted_amount: booking.quoted_amount,
       });
       setShowPayment(true);
-      // ✅ silent refresh
       fetchBookings(user.id, { silent: true });
     } catch (error) {
       console.error("Accept quote error:", error);
@@ -417,10 +431,8 @@ function MyBookings() {
       return;
     }
 
-    // ✅ CLEAR old messages before starting
     setMessage("");
 
-    // ✅ GUARD 1: Check against current bookings state
     const booking = bookings.find((b) => b.id === bookingId);
     const currentStatus = (booking?.status || "").toLowerCase().replace(/\s+/g, "_");
     if (currentStatus !== "completed") {
@@ -432,7 +444,6 @@ function MyBookings() {
       return;
     }
 
-    // ✅ GUARD 2: Check if already reviewed
     if (reviewedBookings[bookingId]) {
       showMessage("You've already reviewed this booking.", "info");
       return;
@@ -485,16 +496,13 @@ function MyBookings() {
 
       showMessage("✅ Review submitted successfully! ⭐", "success");
 
-      // Clear form
       setReviewStates((prev) => ({
         ...prev,
         [bookingId]: { rating: "", comment: "" },
       }));
 
-      // Mark locally as reviewed
       setReviewedBookings((prev) => ({ ...prev, [bookingId]: true }));
 
-      // Confirm with server
       try {
         const r = await fetch(
           `${API_BASE_URL}/bookings/reviews/booking/${bookingId}`,
@@ -511,7 +519,6 @@ function MyBookings() {
         console.warn("Post-submit review check failed:", checkErr);
       }
 
-      // Background refresh
       setTimeout(() => fetchBookings(user.id, { silent: true }), 800);
     } catch (error) {
       console.error("❌ Review error:", error);
@@ -907,6 +914,7 @@ function MyBookings() {
             const isSubmitting = reviewingId === booking.id;
             const isQuoteBusy = quoteActionId === booking.id;
             const isDownloading = downloadingBillId === booking.id;
+            const isBillCopied = copiedBillId === booking.id;
 
             const finalAmount = booking.paid_amount || booking.quoted_amount;
 
@@ -1088,7 +1096,7 @@ function MyBookings() {
                   </div>
                 )}
 
-                {/* PAYMENT COMPLETED + DOWNLOAD BILL */}
+                {/* PAYMENT COMPLETED + COPY BILL LINK */}
                 {showBillCard && (
                   <div
                     style={{
@@ -1113,7 +1121,11 @@ function MyBookings() {
                       onClick={() => downloadBill(booking.id)}
                       style={{
                         padding: "10px 18px",
-                        backgroundColor: isDownloading ? "#94a3b8" : "#2563eb",
+                        backgroundColor: isDownloading
+                          ? "#94a3b8"
+                          : isBillCopied
+                            ? "#16a34a"
+                            : "#2563eb",
                         color: "white",
                         border: "none",
                         borderRadius: "6px",
@@ -1122,7 +1134,11 @@ function MyBookings() {
                         fontSize: "14px",
                       }}
                     >
-                      {isDownloading ? "Downloading..." : "📄 Download Bill (PDF)"}
+                      {isDownloading
+                        ? "Working..."
+                        : isBillCopied
+                          ? "✓ Link Copied!"
+                          : "📋 Copy Bill Link"}
                     </button>
                   </div>
                 )}
